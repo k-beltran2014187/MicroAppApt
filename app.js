@@ -27,6 +27,7 @@
     calendar: '<rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/>', check: '<path d="M5 12l5 5 9-10"/>',
     chevron: '<path d="M6 9l6 6 6-6"/>', scan: '<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>',
     layers: '<path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/>', plan: '<path d="M3 3h18v18H3zM3 13h9M12 3v10M16 21v-8h5"/>',
+    file: '<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 12h6M9 16h6"/>', out: '<path d="M9 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h4M16 8l4 4-4 4M20 12H9"/>',
     grid: '<rect x="3" y="3" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="2"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2"/>',
     home: '<path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/><path d="M10 20v-5h4v5"/>'
   };
@@ -155,7 +156,7 @@
   };
 
   /* ---------- estado ---------- */
-  var S = { projects: [], id: null, view: 'home', tab: 'resumen', user: null, editing: null, importDraft: null, sim: 0, anim: true, thumbs: {} };
+  var S = { projects: [], id: null, view: 'home', menu: false, tab: 'resumen', user: null, editing: null, importDraft: null, sim: 0, anim: true, thumbs: {} };
   var cur = function () { return S.projects.filter(function (p) { return p.id === S.id; })[0] || null; };
   function persist(p) { return store.save(p).catch(function (e) { toast('No se pudo guardar: ' + (e.message || e)); }); }
 
@@ -231,11 +232,12 @@
     var left = p
       ? '<button class="ibtn" data-a="home" title="Mis proyectos" aria-label="Mis proyectos">' + ic('grid') + '</button><span class="brand pbrand">' + lg(p) + '<span class="wm"><b>' + esc(p.name || 'Proyecto') + '</b>' + (p.unit ? '<small>Apto ' + esc(p.unit) + '</small>' : '') + '</span></span>'
       : '<span class="brand" data-a="home" style="cursor:pointer"><span class="mark">' + ic('home') + '</span><span class="wm">Mi Enganche</span></span>';
+    var showPlus = !p, em = S.user && S.user.email ? S.user.email : '', ini = esc((em[0] || '?').toUpperCase());
     return '<div class="ambient" aria-hidden="true"></div><header class="top"><div class="wrap">' + left +
       '<button class="ibtn" data-a="theme" title="Tema: ' + THEME_NAME[themePref] + '" aria-label="Cambiar tema">' + THEME_ICON[themePref] + '</button>' +
-      '<button class="ibtn" data-a="new" title="Nuevo proyecto" aria-label="Nuevo proyecto">' + ic('plus') + '</button>' +
-      (store.mode === 'cloud' ? '<button class="ibtn txt" data-a="logout">Salir</button>' : '') +
-      '</div>' + (store.mode === 'cloud' && S.user ? '<div class="wrap who">' + esc(S.user.email) + '</div>' : '') + '</header>';
+      (showPlus ? '<button class="ibtn" data-a="new" title="Nuevo proyecto" aria-label="Nuevo proyecto">' + ic('plus') + '</button>' : '') +
+      (store.mode === 'cloud' ? '<button class="ibtn av" data-a="menu" aria-label="Mi cuenta" aria-expanded="' + !!S.menu + '">' + ini + '</button>' : '') +
+      '</div>' + (S.menu && store.mode === 'cloud' ? '<div class="menu" id="menu" role="menu"><div class="em">Sesión iniciada como<br><b>' + esc(em) + '</b></div><a href="privacidad.html" target="_blank" rel="noopener">' + ic('file') + ' Aviso de privacidad</a><button data-a="logout">' + ic('out') + ' Cerrar sesión</button></div>' : '') + '</header>';
   }
   function tabsHtml() { return '<nav class="tabs"><div class="tabs-in">' + TABS.map(function (t) { return '<button data-tab="' + t[0] + '" class="' + (S.tab === t[0] ? 'on' : '') + '">' + t[1] + '</button>'; }).join('') + '<i class="ind"></i></div></nav>'; }
   function welcomeHtml() {
@@ -667,6 +669,7 @@
   }
 
   /* ---------- eventos ---------- */
+  document.addEventListener('click', function (e) { if (S.menu && !(e.target.closest && (e.target.closest('#menu') || e.target.closest('[data-a="menu"]')))) { S.menu = false; var m = $('menu'); if (m) m.remove(); } });
   function bind() {
     var sim = $('sim'); if (sim) sim.oninput = function () { S.sim = numv('sim'); var pos = sim.selectionStart; render(); var n = $('sim'); n.focus(); try { n.setSelectionRange(pos, pos); } catch (e) { } };
     Array.prototype.forEach.call($app.querySelectorAll('[data-tab]'), function (b) { b.onclick = function () { S.tab = b.dataset.tab; S.editing = null; S.anim = true; render(); window.scrollTo(0, 0); }; });
@@ -683,7 +686,8 @@
     var p = cur();
     switch (a) {
       case 'new': startImport(false); break;
-      case 'home': S.importDraft = null; go('home'); break;
+      case 'home': S.importDraft = null; S.menu = false; go('home'); break;
+      case 'menu': S.menu = !S.menu; render(); break;
       case 'open': go('project', id, 'resumen'); break;
       case 'pick-logo': { var dr = S.importDraft, lo = el.dataset.i === '-1' ? null : dr.logos[+el.dataset.i]; dr.project.logo = lo ? lo.url : ''; dr.project.logoAr = lo && lo.ar ? lo.ar : 0; renderLogos(); break; }
       case 'upload-logo': pickFile('image/*', false, function (fl) { fileToLogo(fl[0]).then(function (lo) { var dr = S.importDraft; dr.logos = (dr.logos || []).concat([lo]); dr.project.logo = lo.url; dr.project.logoAr = lo.ar; renderLogos(); }).catch(function (e) { toast('No se pudo usar la imagen: ' + (e.message || e)); }); }); break;
