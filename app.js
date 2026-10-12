@@ -31,6 +31,18 @@
   function loadScript(src) {
     return new Promise(function (ok, bad) { var s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = function () { bad(new Error('No se pudo cargar ' + src)); }; document.head.appendChild(s); });
   }
+  // Selector de archivos: el <input> debe estar en el DOM, si no algunos teléfonos (iPhone) no avisan al elegir.
+  function pickFile(accept, multiple, cb) {
+    var inp = document.createElement('input'); inp.type = 'file'; inp.accept = accept; inp.multiple = !!multiple;
+    inp.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0'; document.body.appendChild(inp);
+    var done = function () { setTimeout(function () { inp.remove(); }, 60000); };
+    inp.addEventListener('change', function () { if (inp.files && inp.files.length) cb(inp.files); inp.remove(); });
+    inp.addEventListener('cancel', function () { inp.remove(); }); done(); inp.click();
+  }
+  var isPdf = function (f) { return f.type === 'application/pdf' || /\.pdf$/i.test(f.name); };
+  var isImg = function (f) { return /^image\//.test(f.type) || /\.(jpe?g|png|webp|gif|heic|heif)$/i.test(f.name); };
+  window.addEventListener('error', function (e) { if (e && e.message && !/ResizeObserver/.test(e.message)) toast('Error: ' + e.message); });
+  window.addEventListener('unhandledrejection', function (e) { var m = e.reason && (e.reason.message || e.reason); if (m) toast('Error: ' + m); });
   function ensurePdfjs() {
     return (window.pdfjsLib ? Promise.resolve() : loadScript(PDFJS + 'pdf.min.js')).then(function () { pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS + 'pdf.worker.min.js'; });
   }
@@ -260,24 +272,26 @@
       stat('Si mantienes la cuota original', yrs(r.termMonthsKeep), r.abonos ? 'en vez de ' + yrs(r.termMonthsOrig) : 'plazo total', 'abono') + '</div>';
     h += '<div class="card"><h2>¿Y si abono más?</h2><label>Abono adicional simulado (Q)<input type="number" inputmode="decimal" id="sim" value="' + (extra || '') + '" placeholder="0.00"></label>' +
       '<div class="kv"><span>Cuota total con ese abono</span><b>' + Q(fn) + '</b></div><div class="kv"><span>Diferencia contra hoy</span><b>' + Q(fn - r.totalNow) + '</b></div></div>';
-    if (p.cuotaCredito) h += '<p class="muted">Cotización original: cuota nivelada ' + Q(p.cuotaNivelada) + ' · cuota mensual de crédito ' + Q(p.cuotaCredito) + '.</p>';
+    if (p.mantenimiento) h += '<p class="muted">Aparte del banco pagarás mantenimiento aproximado de ' + Q(p.mantenimiento) + ' al mes.</p>';
+    if (p.cuotaCredito) h += '<p class="muted">Cotización original: ' + (p.cuotaNivelada ? 'cuota nivelada ' + Q(p.cuotaNivelada) + ' · ' : '') + 'cuota mensual de crédito ' + Q(p.cuotaCredito) + '.</p>';
     return h;
   }
 
   /* ---------- parqueos ---------- */
   function tParqueos(p, r) {
     var list = p.parkings || [];
-    var h = '<div class="card"><h2>Parqueos</h2><p class="muted">El apartamento no los incluye: se compran aparte y se pagan por separado. No cuentan para el enganche ni para el préstamo.</p>';
+    var h = '<div class="card"><h2>Parqueos</h2><p class="muted">Los parqueos que se compran aparte se pagan por separado y no cuentan para el enganche ni para el préstamo. Si la cotización ya los incluye en el precio, aparecen como “incluidos”.</p>';
     if (!list.length) h += '<p class="muted">Aún no has agregado parqueos. Puedes registrar uno que estés cotizando y marcarlo como comprado cuando lo decidas.</p>';
     h += list.map(function (k) {
-      return '<div class="park"><div class="nm">' + esc(k.name) + '<small>' + Q(k.price) + (k.bought ? ' · comprado' : ' · solo cotizado') + '</small></div>' +
-        '<button class="btn ' + (k.bought ? 'sec' : 'ghost') + ' sm" data-a="toggle-park" data-id="' + k.id + '">' + (k.bought ? '✓ Comprado' : 'Marcar comprado') + '</button>' +
+      return '<div class="park"><div class="nm">' + esc(k.name) + '<small>' + Q(k.price) + (k.financed ? ' · incluido en el precio (se financia)' : k.bought ? ' · comprado, se paga aparte' : ' · solo cotizado') + '</small></div>' +
+        (k.financed ? '' : '<button class="btn ' + (k.bought ? 'sec' : 'ghost') + ' sm" data-a="toggle-park" data-id="' + k.id + '">' + (k.bought ? '✓ Comprado' : 'Marcar comprado') + '</button>') +
         '<button class="btn danger sm" data-a="del-park" data-id="' + k.id + '" aria-label="Quitar">✕</button></div>';
     }).join('') + '</div>';
     h += '<div class="card"><h2>Agregar parqueo</h2><div class="row"><div><label>Nombre<input id="k_name" placeholder="Ej. Parqueo de carro"></label></div>' +
       '<div><label>Precio (Q)<input id="k_price" type="number" inputmode="decimal" step="0.01" placeholder="0.00"></label></div></div>' +
       '<div class="chips"><button class="chip" data-a="k-chip" data-v="Parqueo de carro">Carro</button><button class="chip" data-a="k-chip" data-v="Parqueo de moto">Moto</button></div>' +
       '<label style="display:flex;gap:8px;align-items:center;margin-top:10px"><input type="checkbox" id="k_bought" style="width:auto;min-height:0;margin:0" checked> Ya lo compré (se paga aparte)</label>' +
+      '<label style="display:flex;gap:8px;align-items:center;margin-top:8px"><input type="checkbox" id="k_fin" style="width:auto;min-height:0;margin:0"> Va incluido en el precio y el préstamo (no se paga aparte)</label>' +
       '<div class="actions"><button class="btn" data-a="add-park">Agregar</button></div></div>';
     if (r.parkTotal) h += '<div class="grid">' + stat('Total comprado', cq(r.parkTotal), 'precio de los parqueos') + stat('Pagado', cq(r.parkPaid), '', 'ok') + stat('Falta', cq(r.parkRem), 'por pagar', 'hero') + '</div>' +
       '<div class="card"><div class="bar"><i data-w="' + r.parkPct.toFixed(1) + '"></i></div><p class="muted" style="margin:0">Registra estos pagos en la pestaña Pagos, en el campo “Parqueo”.</p></div>';
@@ -329,7 +343,7 @@
   function uploadFiles(list) {
     var p = cur(); if (!p || !list.length) return;
     var arr = Array.prototype.slice.call(list).filter(function (f) {
-      var ok = f.type === 'application/pdf' || /^image\//.test(f.type);
+      var ok = isPdf(f) || isImg(f);
       if (!ok) toast('“' + f.name + '” no es PDF ni imagen'); else if (f.size > MAX_FILE) { toast('“' + f.name + '” pesa más de 20 MB'); ok = false; }
       return ok;
     });
@@ -337,14 +351,12 @@
     busy('Guardando planos…');
     p.files = p.files || [];
     arr.reduce(function (pr, f) {
-      return pr.then(function () { var id = uid(); return Files.put(id, f).then(function () { p.files.push({ id: id, name: f.name, type: f.type, size: f.size, date: today() }); }); });
+      return pr.then(function () { var id = uid(); return Files.put(id, f).then(function () { p.files.push({ id: id, name: f.name, type: isPdf(f) ? 'application/pdf' : (f.type || 'image/jpeg'), size: f.size, date: today() }); }); });
     }, Promise.resolve()).then(function () { return store.save(p); })
       .then(function () { unbusy(); toast(arr.length + ' archivo(s) guardado(s)'); render(); })
       .catch(function (e) { unbusy(); toast('No se pudo guardar: ' + (e.message || e)); render(); });
   }
-  function pickFiles() {
-    var inp = document.createElement('input'); inp.type = 'file'; inp.multiple = true; inp.accept = 'application/pdf,image/*'; inp.onchange = function () { uploadFiles(inp.files); }; inp.click();
-  }
+  function pickFiles() { pickFile('application/pdf,image/*,.pdf', true, uploadFiles); }
 
   var V = null; // visor
   function openViewer(fid) {
@@ -395,14 +407,14 @@
     return '<div class="row">' + field(pre + 'name', 'Proyecto', p.name) + field(pre + 'unit', 'Apartamento', p.unit) + field(pre + 'bank', 'Banco', p.bank) + '</div>' +
       '<div class="row" style="margin-top:10px">' + field(pre + 'price', 'Precio total (Q)', p.price, 'number') + field(pre + 'eng', 'Enganche total (Q)', p.engancheTotal, 'number') + field(pre + 'reserva', 'Reserva (Q)', p.reserva, 'number') + '</div>' +
       '<div class="row" style="margin-top:10px">' + field(pre + 'months', 'Meses a fraccionar', p.months, 'number') + field(pre + 'cuota', 'Cuota de enganche (Q)', p.cuotaEnganche, 'number') + field(pre + 'start', 'Mes de la 1.ª cuota', p.startMonth, 'month') + '</div>' +
-      '<div class="row" style="margin-top:10px">' + field(pre + 'rate', 'Tasa anual (%)', p.rate, 'number') + field(pre + 'years', 'Plazo (años)', p.years, 'number') + field(pre + 'iusi', 'IUSI mensual (Q)', p.iusi, 'number') + field(pre + 'seguro', 'Seguro mensual (Q)', p.seguro, 'number') + '</div>' +
+      '<div class="row" style="margin-top:10px">' + field(pre + 'rate', 'Tasa anual (%)', p.rate, 'number') + field(pre + 'years', 'Plazo (años)', p.years, 'number') + field(pre + 'iusi', 'IUSI mensual (Q)', p.iusi, 'number') + field(pre + 'seguro', 'Seguro mensual (Q)', p.seguro, 'number') + field(pre + 'mant', 'Mantenimiento mensual (Q)', p.mantenimiento, 'number') + '</div>' +
       '<label style="margin-top:12px">Color del proyecto</label><div class="swatches" id="' + pre + 'sw">' + ACCENTS.map(function (a) { return '<button type="button" class="sw' + (a.k === p.color ? ' on' : '') + '" style="--sh:' + a.h + '" data-a="color" data-v="' + a.k + '" data-pre="' + pre + '" title="' + a.n + '" aria-label="' + a.n + '"></button>'; }).join('') + '</div>';
   }
   function readForm(pre, base) {
     var o = Object.assign({}, base, {
       name: val(pre + 'name').trim(), unit: val(pre + 'unit').trim(), bank: val(pre + 'bank').trim(), price: numv(pre + 'price'), engancheTotal: numv(pre + 'eng'),
       reserva: numv(pre + 'reserva'), months: Math.round(numv(pre + 'months')), cuotaEnganche: numv(pre + 'cuota'), startMonth: val(pre + 'start') || C.curMonth(),
-      rate: numv(pre + 'rate'), years: numv(pre + 'years'), iusi: numv(pre + 'iusi'), seguro: numv(pre + 'seguro')
+      rate: numv(pre + 'rate'), years: numv(pre + 'years'), iusi: numv(pre + 'iusi'), seguro: numv(pre + 'seguro'), mantenimiento: numv(pre + 'mant')
     });
     if (!o.engancheTotal) o.engancheTotal = C.r2(o.reserva + o.months * o.cuotaEnganche);
     o.enganchePct = o.price ? C.r2(o.engancheTotal / o.price * 100) : 0;
@@ -418,21 +430,32 @@
   }
 
   /* ---------- importación de cotización ---------- */
-  function pickPdf(cb) { var inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'application/pdf'; inp.onchange = function () { if (inp.files[0]) cb(inp.files[0]); }; inp.click(); }
+  // Tasa anual (%) que hace que la cuota nivelada de `principal` a `years` sea `payment` (búsqueda binaria).
+  function estimateRate(principal, payment, years) {
+    var lo = 0, hi = 30; if (C.pmt(principal, 0.0001, years) > payment) return 0;
+    for (var i = 0; i < 40; i++) { var mid = (lo + hi) / 2; if (C.pmt(principal, mid, years) > payment) hi = mid; else lo = mid; }
+    return Math.round(((lo + hi) / 2) * 100) / 100;
+  }
+  function pickPdf(cb) { pickFile('application/pdf,.pdf', false, function (fl) { cb(fl[0]); }); }
   function readPdf(file) {
     return ensurePdfjs().then(function () { return file.arrayBuffer(); }).then(function (buf) { return pdfjsLib.getDocument({ data: buf }).promise; })
       .then(function (pdf) { return pdf.getPage(1); }).then(function (pg) { return pg.getTextContent(); })
-      .then(function (tc) { return window.parseQuote(tc.items.map(function (i) { return { s: i.str, x: i.transform[4], y: i.transform[5] }; })); });
+      .then(function (tc) { return window.parseQuote(tc.items.map(function (i) { return { s: i.str, x: i.transform[4], y: i.transform[5] }; }), { filename: file.name.replace(/^[0-9a-f]{8}-/, '') }); });
   }
   function startImport(updating) {
     pickPdf(function (file) {
       busy('Leyendo tu cotización…');
       readPdf(file).then(function (q) {
         unbusy();
-        if (!q.price && !q.cuotaEnganche) { toast('No pude leer datos de esa cotización. Llena el proyecto a mano.'); if (!updating) openDraft(newProject(), false); return; }
-        var patch = { name: q.name, unit: q.unit, size: q.size, price: q.price, bank: q.bank, engancheTotal: q.engancheTotal || 0, enganchePct: q.enganchePct || 0, reserva: q.reserva || 0, months: q.months || 0, cuotaEnganche: q.cuotaEnganche || 0, rate: q.rate || 0, years: q.years || 0, iusi: q.iusi || 0, seguro: q.seguro || 0, cuotaNivelada: q.cuotaNivelada, cuotaCredito: q.cuotaCredito };
-        if (updating) S.importDraft = { project: Object.assign({}, cur(), patch), isNew: false };
-        else S.importDraft = { project: newProject(Object.assign(patch, { startMonth: C.addMonths((q.quoteDate || today()).slice(0, 7), 1) })), isNew: true };
+        if (!q.price && !q.cuotaEnganche && !q.months) { toast('No pude leer datos de esa cotización. Llena el proyecto a mano.'); if (!updating) openDraft(newProject(), false); return; }
+        var notes = [], rate = q.rate || 0;
+        if (!rate && q.cuotaCredito && q.financed && q.years) { rate = estimateRate(q.financed, q.cuotaCredito, q.years); if (rate) notes.push('La cotización no trae la tasa de interés: la estimé en ' + rate + '% a partir de la cuota del banco (' + Q(q.cuotaCredito) + '). Corrígela si conoces la tasa real.'); }
+        if (q.parking) notes.push('Esta cotización incluye ' + q.parking.name.toLowerCase() + ' (' + Q(q.parking.price) + ') dentro del precio final y del préstamo; lo dejé en Parqueos como “incluido”.');
+        var patch = { name: q.name, unit: q.unit, size: q.size, price: q.price, bank: q.bank, engancheTotal: q.engancheTotal || 0, enganchePct: q.enganchePct || 0, reserva: q.reserva || 0, months: q.months || 0, cuotaEnganche: q.cuotaEnganche || 0, rate: rate, years: q.years || 0, iusi: q.iusi || 0, seguro: q.seguro || 0, mantenimiento: q.mantenimiento || 0, cuotaNivelada: q.cuotaNivelada || null, cuotaCredito: q.cuotaCredito || null };
+        var parkAdd = q.parking ? { id: uid(), name: q.parking.name, price: q.parking.price, bought: true, financed: true } : null;
+        if (updating) { var base = cur(); S.importDraft = { project: Object.assign({}, base, patch), isNew: false, notes: notes };
+          if (parkAdd && !(base.parkings || []).some(function (k) { return k.name === parkAdd.name; })) S.importDraft.project.parkings = (base.parkings || []).concat([parkAdd]); }
+        else { S.importDraft = { project: newProject(Object.assign(patch, { startMonth: C.addMonths((q.quoteDate || today()).slice(0, 7), 1), parkings: parkAdd ? [parkAdd] : [] })), isNew: true, notes: notes }; }
         showDraft(true);
       }).catch(function (e) { unbusy(); toast('Error al leer el PDF: ' + (e.message || e)); });
     });
@@ -441,6 +464,7 @@
   function showDraft(fromPdf) {
     var d = S.importDraft; applyTheme(hueOf(d.project.color));
     $app.innerHTML = headerHtml() + '<main><div class="wrap enter" id="wrap"><div class="card"><h2>' + (fromPdf ? 'Revisa los datos de la cotización' : 'Nuevo proyecto') + '</h2>' +
+      (d.notes || []).map(function (n) { return '<div class="note">' + esc(n) + '</div>'; }).join('') +
       (fromPdf ? '<p class="muted">Estos datos se leyeron del PDF. Corrige lo que haga falta y guarda. “Mes de la 1.ª cuota” es el mes en que empiezas a pagar las cuotas fraccionadas.</p>' : '') +
       formFields(d.project, 'd_') + '<div class="actions"><button class="btn" data-a="draft-save">Guardar</button><button class="btn ghost" data-a="draft-cancel">Cancelar</button>' +
       (!fromPdf ? '<button class="btn sec" data-a="draft-pdf">Mejor subir cotización PDF</button>' : '') + '</div></div></div></main>';
@@ -513,7 +537,7 @@
       case 'k-chip': $('k_name').value = el.dataset.v; break;
       case 'add-park':
         var kn = val('k_name').trim(), kp = numv('k_price'); if (!kn) return toast('Ponle nombre al parqueo');
-        p.parkings = p.parkings || []; p.parkings.push({ id: uid(), name: kn, price: kp, bought: $('k_bought').checked });
+        p.parkings = p.parkings || []; p.parkings.push({ id: uid(), name: kn, price: kp, bought: $('k_bought').checked || $('k_fin').checked, financed: $('k_fin').checked });
         persist(p).then(function () { toast('Parqueo agregado'); render(); }); break;
       case 'toggle-park': p.parkings.forEach(function (k) { if (k.id === id) k.bought = !k.bought; }); persist(p).then(render); break;
       case 'del-park': if (confirm('¿Quitar este parqueo?')) { p.parkings = p.parkings.filter(function (k) { return k.id !== id; }); persist(p).then(render); } break;
@@ -540,9 +564,8 @@
         var blob = new Blob([JSON.stringify(S.projects, null, 2)], { type: 'application/json' }), a2 = document.createElement('a');
         a2.href = URL.createObjectURL(blob); a2.download = 'mi-enganche-respaldo-' + today() + '.json'; a2.click(); break;
       case 'restore':
-        var inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'application/json';
-        inp.onchange = function () {
-          inp.files[0].text().then(function (t) {
+        pickFile('application/json,.json', false, function (fl) {
+          fl[0].text().then(function (t) {
             var arr = JSON.parse(t); if (!Array.isArray(arr)) throw new Error('Formato inválido');
             arr = arr.filter(function (x) { return x && x.id && Array.isArray(x.payments); });
             return Promise.all(arr.map(function (x) { return store.save(x); })).then(function () {
@@ -550,7 +573,7 @@
               if (!S.id && S.projects[0]) S.id = S.projects[0].id; toast(arr.length + ' proyecto(s) restaurados'); S.anim = true; render();
             });
           }).catch(function (e) { toast('Respaldo inválido: ' + e.message); });
-        }; inp.click(); break;
+        }); break;
     }
   }
 

@@ -1,4 +1,4 @@
-const CACHE = 'enganche-v2';
+const CACHE = 'enganche-v3';
 const SHELL = ['./', 'index.html', 'styles.css', 'app.js', 'calc.js', 'quote.js', 'config.js', 'icon.svg', 'manifest.webmanifest'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL))); self.skipWaiting(); });
 self.addEventListener('activate', e => {

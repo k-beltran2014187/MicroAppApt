@@ -40,12 +40,13 @@
       if (!done && it.month && it.month < cm) status = 'vencida';
       sched.push({ label: it.label, n: it.n || 0, amount: it.amount, month: it.month, paid: r2(paid), status: status });
     });
+    if (sched.length && sched.every(function (s) { return s.status === 'pagada'; })) paidEng = Math.max(paidEng, engTotal); // evita centavos sueltos por redondeo de la cotización
     var cuotasPagadas = sched.filter(function (s) { return s.n && s.status === 'pagada'; }).length;
     var next = sched.filter(function (s) { return s.status !== 'pagada'; })[0] || null;
     var overpaid = left > 0.005 ? left : 0; // enganche pagado de más (excede el total)
 
     // Parqueos: se pagan aparte, no forman parte del enganche ni del préstamo.
-    var parkTotal = r2((p.parkings || []).filter(function (k) { return k.bought; }).reduce(function (t, k) { return t + (+k.price || 0); }, 0));
+    var parkTotal = r2((p.parkings || []).filter(function (k) { return k.bought && !k.financed; }).reduce(function (t, k) { return t + (+k.price || 0); }, 0));
     var parkPaid = r2(pays.reduce(function (t, x) { return t + (+x.parqueo || 0); }, 0));
 
     var financedOrig = r2((+p.price || 0) - engTotal);
