@@ -27,6 +27,7 @@
     calendar: '<rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/>', check: '<path d="M5 12l5 5 9-10"/>',
     chevron: '<path d="M6 9l6 6 6-6"/>', scan: '<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>',
     layers: '<path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/>', plan: '<path d="M3 3h18v18H3zM3 13h9M12 3v10M16 21v-8h5"/>',
+    grid: '<rect x="3" y="3" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="2"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2"/>',
     home: '<path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/><path d="M10 20v-5h4v5"/>'
   };
   var ic = function (n) { return '<svg class="i" viewBox="0 0 24 24" aria-hidden="true">' + ICON[n] + '</svg>'; };
@@ -154,7 +155,7 @@
   };
 
   /* ---------- estado ---------- */
-  var S = { projects: [], id: null, tab: 'resumen', user: null, editing: null, importDraft: null, sim: 0, anim: true, thumbs: {} };
+  var S = { projects: [], id: null, view: 'home', tab: 'resumen', user: null, editing: null, importDraft: null, sim: 0, anim: true, thumbs: {} };
   var cur = function () { return S.projects.filter(function (p) { return p.id === S.id; })[0] || null; };
   function persist(p) { return store.save(p).catch(function (e) { toast('No se pudo guardar: ' + (e.message || e)); }); }
 
@@ -169,11 +170,20 @@
 
   /* ---------- pantallas ---------- */
   var TABS = [['resumen', 'Resumen'], ['pagos', 'Pagos'], ['calendario', 'Calendario'], ['prestamo', 'Préstamo'], ['parqueos', 'Parqueos'], ['planos', 'Planos'], ['proyecto', 'Proyecto']];
+  // Navegación: 'home' (todos los proyectos) o 'project' (un proyecto). Soporta el botón atrás del teléfono.
+  function go(view, id, tab) {
+    S.view = view; if (id) S.id = id; if (tab) S.tab = tab; S.anim = true; S.editing = null; S.sim = 0;
+    if (history.pushState && !S._pop) { try { history.pushState({ v: view, id: S.id }, ''); } catch (e) { } }
+    render(); window.scrollTo(0, 0);
+  }
+  window.addEventListener('popstate', function (e) { var st = e.state || {}; S._pop = true; S.importDraft = null; S.view = st.v || 'home'; if (st.id) S.id = st.id; S.anim = true; render(); S._pop = false; });
+  try { history.replaceState({ v: 'home' }, ''); } catch (e) { }
+
   function render() {
-    var p = S.needAuth ? null : cur();
-    applyTheme(p ? p.color : (S.importDraft ? S.importDraft.project.color : (document.documentElement.dataset.accent || 'gold')));
+    var proj = S.view === 'project' && !S.needAuth ? cur() : null, p = proj;
+    applyTheme(p ? p.color : (S.importDraft ? S.importDraft.project.color : 'gold'));
     if (S.needAuth) return renderAuth();
-    var body = p ? tabsHtml() + '<main><div class="wrap' + (S.anim ? ' enter' : '') + '" id="wrap">' + tabHtml(p) + '</div></main>' : '<main><div class="wrap enter" id="wrap">' + welcomeHtml() + '</div></main>';
+    var body = p ? tabsHtml() + '<main><div class="wrap' + (S.anim ? ' enter' : '') + '" id="wrap">' + tabHtml(p) + '</div></main>' : '<main><div class="wrap' + (S.anim ? ' enter' : '') + '" id="wrap">' + (S.projects.length ? homeHtml() : welcomeHtml()) + '</div></main>';
     $app.innerHTML = headerHtml() + body;
     var h = document.querySelector('header.top'); if (h) document.documentElement.style.setProperty('--hh', h.offsetHeight + 'px');
     bind(); post();
@@ -210,10 +220,18 @@
   var cn = function (v) { return '<span data-cu="' + (+v || 0) + '" data-k="n">' + v + '</span>'; };
 
   var label = function (p) { return (p.name || 'Proyecto') + (p.unit ? ' · Apto ' + p.unit : ''); };
+  // Insignia del proyecto: su logo si lo tiene; si no, una inicial elegante.
+  function lg(p, size) {
+    var ini = esc(((p.name || p.unit || '?').trim()[0] || '?').toUpperCase());
+    var ar = +p.logoAr || 1, base = size === 'l' ? 68 : size === 'm' ? 50 : 40, w = p.logo && ar > 1.4 ? Math.min(Math.round(base * ar), base * 3) : 0;
+    return '<span class="lg ' + (size || '') + (p.logo ? '' : ' mono') + (w ? ' wide' : '') + '"' + (w ? ' style="width:' + w + 'px"' : '') + '>' + (p.logo ? '<img alt="" src="' + p.logo + '">' : ini) + '</span>';
+  }
   function headerHtml() {
-    var opts = S.projects.map(function (p) { return '<option value="' + p.id + '"' + (p.id === S.id ? ' selected' : '') + '>' + esc(label(p)) + '</option>'; }).join('');
-    return '<div class="ambient" aria-hidden="true"></div><header class="top' + (S.projects.length && !S.needAuth ? ' hp' : '') + '"><div class="wrap"><span class="brand"><span class="mark">' + ic('home') + '</span><span class="wm">Mi Enganche</span></span>' +
-      (S.projects.length && !S.needAuth ? '<span class="pill"><select id="sel" aria-label="Proyecto">' + opts + '</select>' + ic('chevron') + '</span>' : '') +
+    var p = S.view === 'project' && !S.needAuth && !S.importDraft ? cur() : null;
+    var left = p
+      ? '<button class="ibtn" data-a="home" title="Mis proyectos" aria-label="Mis proyectos">' + ic('grid') + '</button><span class="brand pbrand">' + lg(p) + '<span class="wm"><b>' + esc(p.name || 'Proyecto') + '</b>' + (p.unit ? '<small>Apto ' + esc(p.unit) + '</small>' : '') + '</span></span>'
+      : '<span class="brand" data-a="home" style="cursor:pointer"><span class="mark">' + ic('home') + '</span><span class="wm">Mi Enganche</span></span>';
+    return '<div class="ambient" aria-hidden="true"></div><header class="top"><div class="wrap">' + left +
       '<button class="ibtn" data-a="theme" title="Tema: ' + THEME_NAME[themePref] + '" aria-label="Cambiar tema">' + THEME_ICON[themePref] + '</button>' +
       '<button class="ibtn" data-a="new" title="Nuevo proyecto" aria-label="Nuevo proyecto">' + ic('plus') + '</button>' +
       (store.mode === 'cloud' ? '<button class="ibtn txt" data-a="logout">Salir</button>' : '') +
@@ -230,6 +248,20 @@
       (store.mode === 'local' ? '<p class="muted" style="margin-top:22px">Modo local: tus datos se guardan solo en este dispositivo.</p>' : '') + '</div>';
   }
   function tabHtml(p) { var r = C.compute(p); return { resumen: tResumen, pagos: tPagos, calendario: tCalendario, prestamo: tPrestamo, parqueos: tParqueos, planos: tPlanos, proyecto: tProyecto }[S.tab](p, r); }
+  function homeHtml() {
+    var rs = S.projects.map(function (p) { return { p: p, r: C.compute(p) }; });
+    var paid = rs.reduce(function (t, x) { return t + x.r.paidEng; }, 0), rem = rs.reduce(function (t, x) { return t + x.r.remEng; }, 0), ab = rs.reduce(function (t, x) { return t + x.r.abonos; }, 0);
+    var h = '<div class="home-head"><div class="eyebrow">Mi portafolio</div><h1 class="hero-title">Mis proyectos</h1><p class="muted">' + rs.length + (rs.length === 1 ? ' apartamento en proceso' : ' apartamentos en proceso') + '</p></div>';
+    if (rs.length > 1) h += '<div class="grid">' + stat('Pagado', cq(paid), 'en enganches, en total', 'hero') + stat('Falta', cq(rem), 'de enganche, en total') + stat('Abonado', cq(ab), 'a capital', 'abono') + '</div>';
+    h += '<div class="pgrid">' + rs.map(function (x) {
+      var p = x.p, r = x.r, nx = r.next;
+      return '<button class="pcard" data-accent="' + accentOf(p.color) + '" data-a="open" data-id="' + p.id + '"><div class="pc-top">' + lg(p, 'm') + '<div class="pc-t"><b>' + esc(p.name || 'Proyecto') + '</b><span>' + esc([p.unit ? 'Apto ' + p.unit : '', p.bank].filter(Boolean).join(' · ')) + '</span></div><span class="pc-pct">' + Math.round(r.pctEng) + '<small>%</small></span></div>' +
+        '<div class="bar"><i data-w="' + r.pctEng.toFixed(1) + '"></i></div>' +
+        '<div class="pc-nums"><div><small>Pagado</small><b>' + mh(r.paidEng) + '</b></div><div><small>Falta</small><b>' + mh(r.remEng) + '</b></div></div>' +
+        '<div class="pc-foot"><span>' + (nx ? ic('calendar') + ' ' + esc(nx.label) + (nx.month ? ' · ' + fmtMonth(nx.month) : '') : ic('check') + ' Enganche completo') + '</span><span>' + r.cuotasPagadas + '/' + r.months + ' cuotas</span></div></button>';
+    }).join('') + '<button class="pcard add" data-a="new"><span class="pa-i">' + ic('plus') + '</span><b>Nuevo proyecto</b><span class="muted">Sube una cotización en PDF</span></button></div>';
+    return h;
+  }
   function stat(l, v, sub, cls) { return '<div class="stat ' + (cls || '') + '"><small>' + l + '</small><b>' + v + '</b>' + (sub ? '<span class="sub">' + sub + '</span>' : '') + '</div>'; }
   var RING = 439.82;
   function ringHtml(pct) {
@@ -251,7 +283,7 @@
     if (!p.price || !p.cuotaEnganche) h += '<div class="note">Faltan datos del proyecto (precio o cuota de enganche). Complétalos en la pestaña <b>Proyecto</b>.</div>';
     if (r.overpaid) h += '<div class="note">Has registrado ' + Q(r.overpaid) + ' más de lo que pide el enganche. Si fue un abono, muévelo a la columna “Abono”.</div>';
     var eyebrow = [p.unit ? 'Apto ' + p.unit : '', p.bank].filter(Boolean).join(' · ');
-    h += '<section class="card hero"><div class="hero-grid"><div class="hero-text">' + (eyebrow ? '<div class="eyebrow">' + esc(eyebrow) + '</div>' : '') +
+    h += '<section class="card hero"><div class="hero-grid"><div class="hero-text">' + (p.logo ? '<div class="hero-logo">' + lg(p, 'l') + '</div>' : '') + (eyebrow ? '<div class="eyebrow">' + esc(eyebrow) + '</div>' : '') +
       '<h1 class="hero-title">' + esc(p.name || 'Mi proyecto') + '</h1><div class="hero-meta">' + (p.size ? '<span>' + p.size + ' m²</span>' : '') + '<span>Precio ' + Q(p.price) + '</span></div>' +
       '<div class="kpis"><div class="kpi"><small>Pagado</small><b>' + cq(r.paidEng) + '</b></div><div class="kpi"><small>Falta</small><b>' + cq(r.remEng) + '</b></div><div class="kpi"><small>Enganche total</small><b>' + mh(r.engTotal) + '</b></div></div></div>' +
       ringHtml(r.pctEng) + '</div>' + (r.schedule.length ? pathHtml(r) : '') + '</section>';
@@ -477,7 +509,8 @@
     return o;
   }
   function tProyecto(p) {
-    return '<div class="card"><h2>Apariencia</h2><label>Tema</label><div class="seg2" id="themeSeg">' +
+    return '<div class="card"><h2>Logo del proyecto</h2><div class="logo-row">' + lg(p, 'l') + '<div><p class="muted" style="margin-bottom:10px">Aparece en el encabezado y en tu página de inicio.</p><div class="actions" style="margin-top:0"><button class="btn sec sm" data-a="logo-up">' + ic('upload') + ' Subir imagen</button>' + (p.logo ? '<button class="btn ghost sm" data-a="logo-del">Quitar</button>' : '') + '</div></div></div></div>' +
+      '<div class="card"><h2>Apariencia</h2><label>Tema</label><div class="seg2" id="themeSeg">' +
       ['auto', 'light', 'dark'].map(function (k) { return '<button data-a="theme-set" data-v="' + k + '" class="' + (themePref === k ? 'on' : '') + '">' + THEME_ICON[k] + THEME_NAME[k] + '</button>'; }).join('') + '</div>' +
       '<p class="muted" style="margin:8px 0 0">El color se elige por proyecto, abajo en “Datos del proyecto”.</p></div>' +
       '<div class="card"><h2>Datos del proyecto</h2>' + formFields(p, 'p_') + '<div class="actions"><button class="btn" data-a="save-proj">Guardar</button></div></div>' +
@@ -493,10 +526,65 @@
     return Math.round(((lo + hi) / 2) * 100) / 100;
   }
   function pickPdf(cb) { pickFile('application/pdf,.pdf', false, function (fl) { cb(fl[0]); }); }
+  // Imágenes de la primera página (con su posición) -> candidatos a logo, recortados de la página ya dibujada.
+  function extractLogos(pg, nameBox) {
+    var SC = 2.5, vp = pg.getViewport({ scale: 1 }), vpS = pg.getViewport({ scale: SC }), U = pdfjsLib.Util, OPS = pdfjsLib.OPS;
+    return pg.getOperatorList().then(function (ol) {
+      var m = [1, 0, 0, 1, 0, 0], st = [], boxes = [];
+      for (var i = 0; i < ol.fnArray.length; i++) {
+        var f = ol.fnArray[i], ar = ol.argsArray[i];
+        if (f === OPS.save) st.push(m.slice()); else if (f === OPS.restore) m = st.pop() || m;
+        else if (f === OPS.transform) m = U.transform(m, ar);
+        else if (f === OPS.paintFormXObjectBegin) { st.push(m.slice()); if (ar && ar[0]) m = U.transform(m, ar[0]); }
+        else if (f === OPS.paintFormXObjectEnd) m = st.pop() || m;
+        else if (f === OPS.paintImageXObject || f === OPS.paintInlineImageXObject || f === OPS.paintJpegXObject) {
+          var t = U.transform(vp.transform, m), xs = [], ys = [];
+          [[0, 0], [1, 0], [0, 1], [1, 1]].forEach(function (c) { xs.push(t[0] * c[0] + t[2] * c[1] + t[4]); ys.push(t[1] * c[0] + t[3] * c[1] + t[5]); });
+          boxes.push({ x: Math.min.apply(0, xs), y: Math.min.apply(0, ys), w: Math.max.apply(0, xs) - Math.min.apply(0, xs), h: Math.max.apply(0, ys) - Math.min.apply(0, ys) });
+        }
+      }
+      var pa = vp.width * vp.height;
+      boxes = boxes.filter(function (b) { return b.w >= 30 && b.h >= 30 && b.w * b.h < pa * 0.5 && b.y < vp.height * 0.45; }).sort(function (p, q) { return p.y - q.y || p.x - q.x; }).slice(0, 4);
+      if (!boxes.length) return [];
+      var cv = document.createElement('canvas'); cv.width = vpS.width; cv.height = vpS.height;
+      var ctx = cv.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cv.width, cv.height);
+      return pg.render({ canvasContext: ctx, viewport: vpS }).promise.then(function () {
+        return boxes.map(function (b) {
+          var sx = Math.max(0, b.x * SC) + 2, sy = Math.max(0, b.y * SC) + 2, sw = Math.min(cv.width - sx, b.w * SC) - 4, sh = Math.min(cv.height - sy, b.h * SC) - 4;
+          var k = Math.min(1, 380 / Math.max(sw, sh)), o = document.createElement('canvas'); o.width = Math.round(sw * k); o.height = Math.round(sh * k);
+          var oc = o.getContext('2d'); oc.fillStyle = '#fff'; oc.fillRect(0, 0, o.width, o.height); oc.drawImage(cv, sx, sy, sw, sh, 0, 0, o.width, o.height);
+          // ¿foto o logo? Las fotos tienen muchísimos colores distintos; los logos pocos.
+          var s = oc.getImageData(0, 0, o.width, o.height).data, bins = {}, n = 0;
+          for (var q = 0; q < s.length; q += 16) { var key = (s[q] >> 5) * 64 + (s[q + 1] >> 5) * 8 + (s[q + 2] >> 5); bins[key] = (bins[key] || 0) + 1; n++; }
+          var distinct = Object.keys(bins).filter(function (z) { return bins[z] / n > 0.005; }).length;
+          return { url: o.toDataURL(distinct > 28 ? 'image/jpeg' : 'image/png', .9), ar: o.width / o.height, cx: b.x + b.w / 2, cy: b.y + b.h / 2, area: b.w * b.h, photo: distinct > 28 };
+        });
+      });
+    }).then(function (logos) {
+      // mejor candidato: el logo más cercano a "APARTAMENTOS <NOMBRE>" si existe; si no, el logo más grande
+      var good = logos.filter(function (l) { return !l.photo; }), best = null;
+      if (good.length) best = nameBox ? good.slice().sort(function (p, q) { return Math.hypot(p.cx - nameBox.x, p.cy - nameBox.y) - Math.hypot(q.cx - nameBox.x, q.cy - nameBox.y); })[0] : good.slice().sort(function (p, q) { return q.area - p.area; })[0];
+      return { list: logos, best: best ? logos.indexOf(best) : -1 };
+    }).catch(function () { return { list: [], best: -1 }; });
+  }
   function readPdf(file) {
     return ensurePdfjs().then(function () { return file.arrayBuffer(); }).then(function (buf) { return pdfjsLib.getDocument({ data: buf }).promise; })
-      .then(function (pdf) { return pdf.getPage(1); }).then(function (pg) { return pg.getTextContent(); })
-      .then(function (tc) { return window.parseQuote(tc.items.map(function (i) { return { s: i.str, x: i.transform[4], y: i.transform[5] }; }), { filename: file.name.replace(/^[0-9a-f]{8}-/, '') }); });
+      .then(function (pdf) { return pdf.getPage(1); }).then(function (pg) {
+        return pg.getTextContent().then(function (tc) {
+          var vp = pg.getViewport({ scale: 1 }), nb = null;
+          tc.items.forEach(function (it) { if (/^\s*apartamentos?\s+\S/i.test(it.str)) { var t = pdfjsLib.Util.transform(vp.transform, it.transform); nb = { x: t[4] + it.width / 2, y: t[5] }; } });
+          var q = window.parseQuote(tc.items.map(function (i) { return { s: i.str, x: i.transform[4], y: i.transform[5] }; }), { filename: file.name.replace(/^[0-9a-f]{8}-/, '') });
+          return extractLogos(pg, nb).then(function (lg) { q._logos = lg; return q; });
+        });
+      });
+  }
+  // Imagen subida a mano -> logo pequeño (máx. 360 px) en data URL
+  function fileToLogo(file) {
+    return new Promise(function (ok, bad) {
+      var u = URL.createObjectURL(file), im = new Image();
+      im.onload = function () { var k = Math.min(1, 360 / Math.max(im.width, im.height)), c = document.createElement('canvas'); c.width = Math.max(1, Math.round(im.width * k)); c.height = Math.max(1, Math.round(im.height * k)); c.getContext('2d').drawImage(im, 0, 0, c.width, c.height); URL.revokeObjectURL(u); ok({ url: c.toDataURL(/jpe?g/i.test(file.type) ? 'image/jpeg' : 'image/png', .9), ar: c.width / c.height}); };
+      im.onerror = function () { URL.revokeObjectURL(u); bad(new Error('imagen no válida')); }; im.src = u;
+    });
   }
   function startImport(updating) {
     pickPdf(function (file) {
@@ -508,10 +596,11 @@
         if (!rate && q.cuotaCredito && q.financed && q.years) { rate = estimateRate(q.financed, q.cuotaCredito, q.years); if (rate) notes.push('La cotización no trae la tasa de interés: la estimé en ' + rate + '% a partir de la cuota del banco (' + Q(q.cuotaCredito) + '). Corrígela si conoces la tasa real.'); }
         if (q.parking) notes.push('Esta cotización incluye ' + q.parking.name.toLowerCase() + ' (' + Q(q.parking.price) + ') dentro del precio final y del préstamo; lo dejé en Parqueos como “incluido”.');
         var patch = { name: q.name, unit: q.unit, size: q.size, price: q.price, bank: q.bank, engancheTotal: q.engancheTotal || 0, enganchePct: q.enganchePct || 0, reserva: q.reserva || 0, months: q.months || 0, cuotaEnganche: q.cuotaEnganche || 0, rate: rate, years: q.years || 0, iusi: q.iusi || 0, seguro: q.seguro || 0, mantenimiento: q.mantenimiento || 0, cuotaNivelada: q.cuotaNivelada || null, cuotaCredito: q.cuotaCredito || null };
+        var lgs = q._logos || { list: [], best: -1 }; if (lgs.best >= 0) { patch.logo = lgs.list[lgs.best].url; patch.logoAr = lgs.list[lgs.best].ar; }
         var parkAdd = q.parking ? { id: uid(), name: q.parking.name, price: q.parking.price, bought: true, financed: true } : null;
-        if (updating) { var base = cur(); S.importDraft = { project: Object.assign({}, base, patch), isNew: false, notes: notes };
+        if (updating) { var base = cur(); if (!lgs.list.length || lgs.best < 0) { delete patch.logo; delete patch.logoAr; } S.importDraft = { project: Object.assign({}, base, patch), isNew: false, notes: notes, logos: lgs.list };
           if (parkAdd && !(base.parkings || []).some(function (k) { return k.name === parkAdd.name; })) S.importDraft.project.parkings = (base.parkings || []).concat([parkAdd]); }
-        else { S.importDraft = { project: newProject(Object.assign(patch, { startMonth: C.addMonths((q.quoteDate || today()).slice(0, 7), 1), parkings: parkAdd ? [parkAdd] : [] })), isNew: true, notes: notes }; }
+        else { S.importDraft = { project: newProject(Object.assign(patch, { startMonth: C.addMonths((q.quoteDate || today()).slice(0, 7), 1), parkings: parkAdd ? [parkAdd] : [] })), isNew: true, notes: notes, logos: lgs.list }; }
         showDraft(true);
       }).catch(function (e) { unbusy(); toast('Error al leer el PDF: ' + (e.message || e)); });
     });
@@ -522,9 +611,16 @@
     $app.innerHTML = headerHtml() + '<main><div class="wrap enter" id="wrap"><div class="card"><h2>' + (fromPdf ? 'Revisa los datos de la cotización' : 'Nuevo proyecto') + '</h2>' +
       (d.notes || []).map(function (n) { return '<div class="note">' + esc(n) + '</div>'; }).join('') +
       (fromPdf ? '<p class="muted">Estos datos se leyeron del PDF. Corrige lo que haga falta y guarda. “Mes de la 1.ª cuota” es el mes en que empiezas a pagar las cuotas fraccionadas.</p>' : '') +
+      '<label>Logo del proyecto</label><div class="logos" id="logos"></div>' +
       formFields(d.project, 'd_') + '<div class="actions"><button class="btn" data-a="draft-save">Guardar</button><button class="btn ghost" data-a="draft-cancel">Cancelar</button>' +
       (!fromPdf ? '<button class="btn sec" data-a="draft-pdf">Mejor subir cotización PDF</button>' : '') + '</div></div></div></main>';
-    S.anim = true; bind(); post();
+    S.anim = true; bind(); post(); renderLogos();
+  }
+  function renderLogos() {
+    var box = $('logos'), d = S.importDraft; if (!box || !d) return; var cur0 = d.project.logo || '';
+    box.innerHTML = (d.logos || []).map(function (l, i) { return '<button type="button" class="lgo' + (l.url === cur0 ? ' on' : '') + '" data-a="pick-logo" data-i="' + i + '"><img alt="Logo ' + (i + 1) + '" src="' + l.url + '"></button>'; }).join('') +
+      '<button type="button" class="lgo txt' + (!cur0 ? ' on' : '') + '" data-a="pick-logo" data-i="-1">Sin logo</button><button type="button" class="lgo txt" data-a="upload-logo">' + ic('upload') + ' Subir</button>';
+    Array.prototype.forEach.call(box.querySelectorAll('[data-a]'), function (b) { b.onclick = function (ev) { ev.preventDefault(); act(b.dataset.a, b.dataset.id, b); }; });
   }
 
   /* ---------- autenticación (modo nube) ---------- */
@@ -547,7 +643,6 @@
 
   /* ---------- eventos ---------- */
   function bind() {
-    var sel = $('sel'); if (sel) sel.onchange = function () { S.id = sel.value; S.editing = null; S.sim = 0; S.anim = true; render(); };
     var sim = $('sim'); if (sim) sim.oninput = function () { S.sim = numv('sim'); var pos = sim.selectionStart; render(); var n = $('sim'); n.focus(); try { n.setSelectionRange(pos, pos); } catch (e) { } };
     Array.prototype.forEach.call($app.querySelectorAll('[data-tab]'), function (b) { b.onclick = function () { S.tab = b.dataset.tab; S.editing = null; S.anim = true; render(); window.scrollTo(0, 0); }; });
     Array.prototype.forEach.call($app.querySelectorAll('[data-a]'), function (b) { b.onclick = function (ev) { ev.preventDefault(); ev.stopPropagation(); act(b.dataset.a, b.dataset.id, b); }; });
@@ -563,13 +658,19 @@
     var p = cur();
     switch (a) {
       case 'new': startImport(false); break;
+      case 'home': S.importDraft = null; go('home'); break;
+      case 'open': go('project', id, 'resumen'); break;
+      case 'pick-logo': { var dr = S.importDraft, lo = el.dataset.i === '-1' ? null : dr.logos[+el.dataset.i]; dr.project.logo = lo ? lo.url : ''; dr.project.logoAr = lo && lo.ar ? lo.ar : 0; renderLogos(); break; }
+      case 'upload-logo': pickFile('image/*', false, function (fl) { fileToLogo(fl[0]).then(function (lo) { var dr = S.importDraft; dr.logos = (dr.logos || []).concat([lo]); dr.project.logo = lo.url; dr.project.logoAr = lo.ar; renderLogos(); }).catch(function (e) { toast('No se pudo usar la imagen: ' + (e.message || e)); }); }); break;
+      case 'logo-up': pickFile('image/*', false, function (fl) { fileToLogo(fl[0]).then(function (lo) { p.logo = lo.url; p.logoAr = lo.ar; persist(p).then(function () { toast('Logo actualizado'); render(); }); }).catch(function (e) { toast('No se pudo usar la imagen: ' + (e.message || e)); }); }); break;
+      case 'logo-del': p.logo = ''; persist(p).then(function () { toast('Logo quitado'); render(); }); break;
       case 'theme': setTheme({ auto: 'light', light: 'dark', dark: 'auto' }[themePref]); toast('Tema: ' + THEME_NAME[themePref]); render(); break;
       case 'theme-set': setTheme(el.dataset.v); render(); break;
       case 'color':
         var pre = el.dataset.pre; Array.prototype.forEach.call($(pre + 'sw').children, function (b) { b.classList.toggle('on', b === el); });
         if (pre === 'd_') { S.importDraft.project.color = el.dataset.v; } else { p.color = el.dataset.v; persist(p); }
         applyTheme(el.dataset.v); break;
-      case 'logout': sb.auth.signOut().then(function () { S.user = null; S.projects = []; S.id = null; S.needAuth = true; render(); }); break;
+      case 'logout': sb.auth.signOut().then(function () { S.user = null; S.projects = []; S.id = null; S.view = 'home'; S.needAuth = true; render(); }); break;
       case 'login': case 'signup': authDo(a); break;
       case 'fill-cuota': $('f_eng').value = p.cuotaEnganche; break;
       case 'fill-reserva': $('f_eng').value = p.reserva; break;
@@ -605,7 +706,7 @@
       case 'import-update': startImport(true); break;
       case 'del-proj':
         if (confirm('¿Eliminar "' + label(p) + '" y todos sus pagos y planos? No se puede deshacer.')) {
-          Promise.all((p.files || []).map(function (f) { return Files.del(f.id).catch(function () { }); })).then(function () { return store.remove(p.id); }).then(function () { S.projects = S.projects.filter(function (x) { return x.id !== p.id; }); S.id = S.projects[0] ? S.projects[0].id : null; S.anim = true; render(); });
+          Promise.all((p.files || []).map(function (f) { return Files.del(f.id).catch(function () { }); })).then(function () { return store.remove(p.id); }).then(function () { S.projects = S.projects.filter(function (x) { return x.id !== p.id; }); S.id = S.projects[0] ? S.projects[0].id : null; go('home'); });
         } break;
       case 'draft-pdf': startImport(false); break;
       case 'draft-cancel': S.importDraft = null; S.anim = true; render(); break;
@@ -614,8 +715,8 @@
         if (!np.name && !np.unit) return toast('Ponle nombre al proyecto');
         S.importDraft = null;
         if (d.isNew) S.projects.push(np); else S.projects = S.projects.map(function (x) { return x.id === np.id ? np : x; });
-        S.id = np.id; S.tab = d.isNew ? 'pagos' : S.tab; S.anim = true;
-        persist(np).then(function () { toast('Proyecto guardado'); render(); }); break;
+        S.id = np.id; S.view = 'project'; S.tab = d.isNew ? 'pagos' : S.tab; S.anim = true;
+        persist(np).then(function () { toast('Proyecto guardado'); go('project', np.id); }); break;
       case 'export':
         var blob = new Blob([JSON.stringify(S.projects, null, 2)], { type: 'application/json' }), a2 = document.createElement('a');
         a2.href = URL.createObjectURL(blob); a2.download = 'mi-enganche-respaldo-' + today() + '.json'; a2.click(); break;
@@ -637,12 +738,14 @@
   function boot() {
     var slow = store.mode === 'cloud'; if (slow) busy('Cargando tus proyectos…');
     store.load().then(function (list) {
-      if (slow) unbusy(); S.projects = list; S.id = (list.filter(function (p) { return p.id === S.id; })[0] || list[0] || {}).id || null; S.anim = true; render();
+      if (slow) unbusy(); S.projects = list; S.id = (list.filter(function (p) { return p.id === S.id; })[0] || list[0] || {}).id || null; S.view = 'home'; S.anim = true; render();
     }).catch(function (e) { if (slow) unbusy(); toast('No se pudieron cargar los datos: ' + (e.message || e)); render(); });
   }
   function init() {
     applyTheme();
     if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js').catch(function () { });
+    var hadCtl = !!(navigator.serviceWorker && navigator.serviceWorker.controller), reloaded = false;
+    if (navigator.serviceWorker) navigator.serviceWorker.addEventListener('controllerchange', function () { if (hadCtl && !reloaded) { reloaded = true; location.reload(); } }); // nueva versión lista
     if (CFG.supabaseUrl && CFG.supabaseAnonKey) {
       busy('Conectando…');
       loadScript('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js').then(function () {
