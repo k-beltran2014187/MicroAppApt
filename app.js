@@ -28,6 +28,7 @@
     chevron: '<path d="M6 9l6 6 6-6"/>', scan: '<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>',
     layers: '<path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/>', plan: '<path d="M3 3h18v18H3zM3 13h9M12 3v10M16 21v-8h5"/>',
     file: '<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 12h6M9 16h6"/>', out: '<path d="M9 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h4M16 8l4 4-4 4M20 12H9"/>',
+    car: '<path d="M5 16V11l2-5h10l2 5v5M3 16h18M7 19v-3M17 19v-3"/><circle cx="8" cy="13" r=".8"/><circle cx="16" cy="13" r=".8"/>', lock: '<rect x="4" y="10" width="16" height="11" rx="3"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14.5v2"/>', sync: '<path d="M20 8a8 8 0 0 0-14-2M4 4v4h4M4 16a8 8 0 0 0 14 2M20 20v-4h-4"/>',
     grid: '<rect x="3" y="3" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="2"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2"/>',
     home: '<path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/><path d="M10 20v-5h4v5"/>'
   };
@@ -177,13 +178,13 @@
     if (history.pushState && !S._pop) { try { history.pushState({ v: view, id: S.id }, ''); } catch (e) { } }
     render(); window.scrollTo(0, 0);
   }
-  window.addEventListener('popstate', function (e) { var st = e.state || {}; S._pop = true; S.importDraft = null; S.view = st.v || 'home'; if (st.id) S.id = st.id; S.anim = true; render(); S._pop = false; });
+  window.addEventListener('popstate', function (e) { var st = e.state || {}; if (S.needAuth) { S.gate = st.gate || 'landing'; render(); return; } S._pop = true; S.importDraft = null; S.view = st.v || 'home'; if (st.id) S.id = st.id; S.anim = true; render(); S._pop = false; });
   try { history.replaceState({ v: 'home' }, ''); } catch (e) { }
 
   function render() {
     var proj = S.view === 'project' && !S.needAuth ? cur() : null, p = proj;
     applyTheme(p ? p.color : (S.importDraft ? S.importDraft.project.color : 'gold'));
-    if (S.needAuth) return renderAuth();
+    if (S.needAuth) return S.gate === 'auth' ? renderAuth() : renderLanding();
     var body = p ? tabsHtml() + '<main><div class="wrap' + (S.anim ? ' enter' : '') + '" id="wrap">' + tabHtml(p) + '</div></main>' : '<main><div class="wrap' + (S.anim ? ' enter' : '') + '" id="wrap">' + (S.projects.length ? homeHtml() : welcomeHtml()) + '</div></main>';
     $app.innerHTML = headerHtml() + body;
     var h = document.querySelector('header.top'); if (h) document.documentElement.style.setProperty('--hh', h.offsetHeight + 'px');
@@ -626,6 +627,63 @@
   }
 
   /* ---------- autenticación (modo nube) ---------- */
+  /* ---------- página de presentación (antes de iniciar sesión) ---------- */
+  function sampleProject() {
+    var sm = C.addMonths(C.curMonth(), -5), d = function (k) { return C.addMonths(sm, k) + '-15'; };
+    return { name: 'Residencial Alameda', unit: '1204', bank: 'Banco de ejemplo', size: 58, price: 850000, reserva: 3000, months: 15, cuotaEnganche: 5300, engancheTotal: 82500, startMonth: sm, rate: 7.5, years: 25, iusi: 0, seguro: 0, color: 'gold', parkings: [], files: [],
+      payments: [{ id: 'a', date: d(0), enganche: 3000 }, { id: 'b', date: d(0), enganche: 5300 }, { id: 'c', date: d(1), enganche: 5300 }, { id: 'd', date: d(2), enganche: 5300 }, { id: 'e', date: d(3), enganche: 5300 }, { id: 'f', date: d(4), enganche: 5300 }] };
+  }
+  function previewHtml() {
+    var p = sampleProject(), r = C.compute(p), nx = r.next, due = nx ? Math.max(0, nx.amount - nx.paid) : 0;
+    return '<div class="mock rv"><span class="mock-tag">Vista de ejemplo</span><section class="card hero" style="margin:0"><div class="hero-grid"><div class="hero-text"><div class="eyebrow">Apto ' + p.unit + ' · ' + p.bank + '</div><h3 class="hero-title" style="font-size:2.3rem">' + p.name + '</h3>' +
+      '<div class="kpis" style="margin-top:14px"><div class="kpi"><small>Pagado</small><b>' + cq(r.paidEng) + '</b></div><div class="kpi"><small>Falta</small><b>' + cq(r.remEng) + '</b></div></div></div>' + ringHtml(r.pctEng) + '</div>' + pathHtml(r) + '</section>' +
+      '<div class="card next" style="margin:12px 0 0"><div class="ic">' + ic('calendar') + '</div><div class="tx"><b>Próximo pago · ' + esc(nx ? nx.label : '') + '</b><span>' + (nx && nx.month ? fmtMonth(nx.month) : '') + '</span></div><div class="am">' + Q(due) + '</div></div></div>';
+  }
+  function landingHtml() {
+    var steps = [['1', 'Sube tu cotización', 'Arrastra el PDF que te dio la desarrolladora. La app lee el precio, el enganche, las cuotas, el plazo y hasta el logo del proyecto.'],
+      ['2', 'Registra tus pagos', 'Uno por uno o varios meses de golpe. El enganche, los abonos y los parqueos van cada uno en su lugar.'],
+      ['3', 'Mira tu avance', 'Cuánto llevas, cuánto falta, cuántas cuotas quedan y cómo cambia tu cuota del préstamo si abonas.']];
+    var feats = [['scan', 'Lee tu cotización', 'Sube el PDF y se llena solo. Si el formato es distinto, lo completas a mano en un minuto.'], ['layers', 'Enganche y abonos separados', 'Los abonos extra no se mezclan con el enganche: reducen el capital y recalculan tu cuota.'],
+      ['car', 'Parqueos aparte', 'Registra los que compras por separado o los que ya van incluidos en el precio.'], ['plan', 'Tus planos, siempre contigo', 'Guarda los planos de cada proyecto y ábrelos con zoom desde el teléfono.'],
+      ['grid', 'Varios proyectos', 'Cada apartamento con su logo y su color, todos en una sola página de inicio.'], ['sync', 'En tu teléfono y tu computadora', 'Entra con tu cuenta desde cualquier dispositivo y encuentra todo igual.']];
+    var faq = [['¿Cuánto cuesta?', 'Es gratis. Creas tu cuenta con tu correo y empiezas a usarla.'], ['¿Necesito la cotización en PDF?', 'No es obligatoria. Si la subes, la app llena los datos por ti; si no, los escribes tú.'],
+      ['¿Quién puede ver mis datos?', 'Solo tú. Cada cuenta ve únicamente su propia información, y la conexión es cifrada. Puedes borrar tus proyectos cuando quieras.'], ['¿Sirve para cualquier apartamento?', 'Sí. Funciona con cualquier proyecto que fraccione el enganche en cuotas, con o sin reserva, y con o sin parqueo.'],
+      ['¿Reemplaza a mi desarrolladora o a mi banco?', 'No. Es una herramienta para que tú lleves tu propio control. Los saldos oficiales siempre son los de la desarrolladora y el banco.']];
+    return '<header class="top lp-nav"><div class="wrap"><span class="brand"><span class="mark">' + ic('home') + '</span><span class="wm">Mi Enganche</span></span>' +
+      '<button class="ibtn" data-a="theme" aria-label="Cambiar tema">' + THEME_ICON[themePref] + '</button><button class="btn ghost sm" data-a="go-auth" data-id="login">Entrar</button><button class="btn sm" data-a="go-auth" data-id="signup">Crear cuenta</button></div></header>' +
+      '<div class="ambient" aria-hidden="true"></div><main class="wrap lp">' +
+      '<section class="lp-hero"><div class="lp-copy"><div class="eyebrow">Control de enganche</div><h1>Tu apartamento, <em>siempre bajo control.</em></h1>' +
+      '<p class="lp-lead">Comprar un apartamento en preventa son muchos pagos durante meses. Mi Enganche te dice cuánto llevas, cuánto falta y cuánto sería tu cuota del préstamo, sin hojas de cálculo.</p>' +
+      '<div class="lp-cta"><button class="btn" data-a="go-auth" data-id="signup">Crear cuenta gratis</button><a class="btn ghost" href="#como">Ver cómo funciona</a></div>' +
+      '<div class="lp-note"><span>Gratis</span><span>Sin tarjeta</span><span>Tus datos son tuyos</span></div></div>' + previewHtml() + '</section>' +
+      '<section class="lp-sec" id="como"><div class="rv"><div class="eyebrow">Cómo funciona</div><h2>Tres pasos y listo</h2></div><div class="steps">' +
+      steps.map(function (s) { return '<div class="step rv"><span class="sn">' + s[0] + '</span><b>' + s[1] + '</b><p>' + s[2] + '</p></div>'; }).join('') + '</div></section>' +
+      '<section class="lp-sec"><div class="rv"><div class="eyebrow">Lo que incluye</div><h2>Todo lo que necesitas para llevar tu enganche</h2></div><div class="feats lp-feats">' +
+      feats.map(function (f) { return '<div class="feat rv"><div class="fi">' + ic(f[0]) + '</div><b>' + f[1] + '</b><span>' + f[2] + '</span></div>'; }).join('') + '</div></section>' +
+      '<section class="lp-sec"><div class="calc card rv"><div class="calc-in"><div><div class="eyebrow">Calculadora gratis</div><h2 style="font-size:2rem">¿Cuánto pagarías por tu apartamento?</h2><p class="muted">Un cálculo de referencia: enganche, cuota mensual de enganche y cuota estimada del banco.</p>' +
+      '<div class="row" style="margin-top:12px">' + field('c_price', 'Precio (Q)', 750000, 'number') + field('c_pct', 'Enganche (%)', 10, 'number') + '</div><div class="row" style="margin-top:10px">' + field('c_n', 'Meses del enganche', 15, 'number') + field('c_rate', 'Tasa anual (%)', 7.5, 'number') + field('c_y', 'Plazo (años)', 25, 'number') + '</div></div>' +
+      '<div class="calc-out" id="c_out"></div></div><p class="muted" style="margin:14px 0 0;font-size:.78rem">Referencial: no incluye IUSI, seguros ni gastos. Los valores oficiales son los de tu desarrolladora y tu banco.</p></div></section>' +
+      '<section class="lp-sec"><div class="lp-trust card rv"><div class="fi" style="margin:0">' + ic('lock') + '</div><div><h2 style="font-size:1.8rem;margin:0 0 6px">Tus datos son tuyos</h2><p class="muted" style="margin:0">Cada cuenta ve solo su información. La conexión es cifrada y puedes eliminar tus proyectos cuando quieras. Lee el <a href="privacidad.html" target="_blank" rel="noopener" style="color:var(--acc)">aviso de privacidad</a>.</p></div></div></section>' +
+      '<section class="lp-sec"><div class="rv"><div class="eyebrow">Preguntas frecuentes</div><h2>Antes de empezar</h2></div><div class="faq rv">' +
+      faq.map(function (q) { return '<details><summary>' + q[0] + '</summary><p>' + q[1] + '</p></details>'; }).join('') + '</div></section>' +
+      '<section class="lp-sec"><div class="lp-final card rv"><h2>Empieza hoy, toma el control de tu enganche</h2><p class="muted">Crea tu cuenta gratis y sube tu primera cotización en menos de un minuto.</p><div class="lp-cta" style="justify-content:center"><button class="btn" data-a="go-auth" data-id="signup">Crear cuenta gratis</button><button class="btn ghost" data-a="go-auth" data-id="login">Ya tengo cuenta</button></div></div></section></main>' +
+      '<footer class="lp-foot"><div class="wrap"><span>© ' + new Date().getFullYear() + ' Mi Enganche</span><span><a href="privacidad.html" target="_blank" rel="noopener">Aviso de privacidad</a> · Hecho por <a href="https://estudiopixel502.com" target="_blank" rel="noopener">Estudio Pixel 502</a></span></div></footer>';
+  }
+  function updateCalc() {
+    var price = numv('c_price'), pct = numv('c_pct'), n = Math.max(1, Math.round(numv('c_n'))), rate = numv('c_rate'), y = numv('c_y');
+    var eng = price * pct / 100, fin = Math.max(0, price - eng), pm = C.pmt(fin, rate, y), o = $('c_out'); if (!o) return;
+    o.innerHTML = '<div class="co"><small>Enganche total</small><b>' + mh(eng) + '</b></div><div class="co"><small>Cuota de enganche</small><b>' + mh(eng / n) + '</b><span>por ' + n + ' meses</span></div>' +
+      '<div class="co"><small>A financiar</small><b>' + mh(fin) + '</b></div><div class="co hl"><small>Cuota estimada del banco</small><b>' + mh(pm) + '</b><span>capital + interés, ' + (y || 0) + ' años</span></div>';
+  }
+  function renderLanding() {
+    applyTheme('gold'); S.anim = true; $app.innerHTML = landingHtml(); bind(); post(); updateCalc();
+    ['c_price', 'c_pct', 'c_n', 'c_rate', 'c_y'].forEach(function (id) { var e = $(id); if (e) e.oninput = updateCalc; });
+    var els = $app.querySelectorAll('.rv');
+    if (!('IntersectionObserver' in window) || reduced) { Array.prototype.forEach.call(els, function (e) { e.classList.add('in'); }); return; }
+    var io = new IntersectionObserver(function (es) { es.forEach(function (en) { if (en.isIntersecting) { en.target.classList.add('in'); io.unobserve(en.target); } }); }, { threshold: .12 });
+    Array.prototype.forEach.call(els, function (e) { io.observe(e); });
+  }
+
   var AUTH_ERR = [[/invalid login credentials/i, 'Correo o contraseña incorrectos.'], [/already registered|already been registered/i, 'Ya existe una cuenta con ese correo. Prueba entrar.'],
     [/at least 6|weak password|password should/i, 'La contraseña debe tener mínimo 6 caracteres.'], [/email not confirmed/i, 'Primero confirma tu correo: revisa tu bandeja de entrada (y spam).'],
     [/rate limit|too many/i, 'Demasiados intentos. Espera unos minutos y vuelve a probar.'], [/invalid email|unable to validate email/i, 'Ese correo no parece válido.'], [/same password/i, 'Elige una contraseña distinta a la anterior.']];
@@ -635,7 +693,7 @@
     applyTheme('gold'); var mode = S.authMode || 'login', tab = mode === 'login' || mode === 'signup';
     var title = { login: 'Bienvenido de vuelta', signup: 'Crea tu cuenta', forgot: 'Recupera tu contraseña', recover: 'Nueva contraseña' }[mode];
     var sub = { login: 'Entra para ver tus proyectos desde cualquier dispositivo.', signup: 'Guarda tus proyectos, pagos y planos de forma segura y accede desde tu teléfono o computadora.', forgot: 'Te enviaremos un enlace a tu correo para elegir una nueva contraseña.', recover: 'Escribe tu nueva contraseña.' }[mode];
-    $app.innerHTML = '<div class="ambient" aria-hidden="true"></div><div class="wrap"><form class="card auth" id="authForm" novalidate><div class="heroorb" id="heroOrb"></div><div class="eyebrow" style="text-align:center">Mi Enganche</div>' +
+    $app.innerHTML = '<div class="ambient" aria-hidden="true"></div><div class="wrap"><div style="padding-top:18px"><button type="button" class="chip" data-a="go-landing">← Volver al inicio</button></div><form class="card auth" id="authForm" novalidate style="margin-top:14px"><div class="heroorb" id="heroOrb"></div><div class="eyebrow" style="text-align:center">Mi Enganche</div>' +
       '<h2 style="text-align:center;margin:6px 0 6px">' + title + '</h2><p class="muted" style="text-align:center;margin-bottom:18px">' + sub + '</p>' +
       (tab ? '<div class="seg2" style="display:flex;margin:0 0 16px"><button type="button" style="flex:1;justify-content:center" class="' + (mode === 'login' ? 'on' : '') + '" data-a="auth-mode" data-id="login">Entrar</button><button type="button" style="flex:1;justify-content:center" class="' + (mode === 'signup' ? 'on' : '') + '" data-a="auth-mode" data-id="signup">Crear cuenta</button></div>' : '') +
       (mode !== 'recover' ? '<label>Correo<input id="a_mail" type="email" autocomplete="email" inputmode="email" value="' + esc(S.authMail || '') + '"></label>' : '') +
@@ -699,7 +757,9 @@
         var pre = el.dataset.pre; Array.prototype.forEach.call($(pre + 'sw').children, function (b) { b.classList.toggle('on', b === el); });
         if (pre === 'd_') { S.importDraft.project.color = el.dataset.v; } else { p.color = el.dataset.v; persist(p); }
         applyTheme(el.dataset.v); break;
-      case 'logout': sb.auth.signOut().then(function () { S.user = null; S.projects = []; S.id = null; S.view = 'home'; S.needAuth = true; render(); }); break;
+      case 'logout': sb.auth.signOut().then(function () { S.user = null; S.projects = []; S.id = null; S.view = 'home'; S.needAuth = true; S.gate = 'landing'; S.menu = false; render(); }); break;
+      case 'go-auth': S.gate = 'auth'; S.authMode = id === 'login' ? 'login' : 'signup'; try { history.pushState({ gate: 'auth' }, ''); } catch (e) { } renderAuth(); window.scrollTo(0, 0); break;
+      case 'go-landing': S.gate = 'landing'; render(); window.scrollTo(0, 0); break;
       case 'auth-mode': S.authMode = id; S.authMail = val('a_mail') || S.authMail; renderAuth(); break;
       case 'migrate': migrateLocal(); break;
       case 'migrate-skip': try { localStorage.setItem('enganche.migrated.' + S.user.id, '1'); } catch (e) { } S.localList = []; render(); break;
@@ -800,12 +860,12 @@
       busy('Conectando…');
       loadScript('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js').then(function () {
         sb = window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseAnonKey); store = Remote;
-        sb.auth.onAuthStateChange(function (evt) { if (evt === 'PASSWORD_RECOVERY') { S.recovery = true; if (S.ready) { S.needAuth = true; S.authMode = 'recover'; render(); } } });
+        sb.auth.onAuthStateChange(function (evt) { if (evt === 'PASSWORD_RECOVERY') { S.recovery = true; if (S.ready) { S.needAuth = true; S.gate = 'auth'; S.authMode = 'recover'; render(); } } });
         return sb.auth.getSession();
       }).then(function (r) {
         unbusy(); S.ready = true;
-        if (S.recovery && r.data.session) { S.needAuth = true; S.authMode = 'recover'; render(); }
-        else if (r.data.session) { S.user = r.data.session.user; boot(); } else { S.needAuth = true; render(); }
+        if (S.recovery && r.data.session) { S.needAuth = true; S.gate = 'auth'; S.authMode = 'recover'; render(); }
+        else if (r.data.session) { S.user = r.data.session.user; boot(); } else { S.needAuth = true; S.gate = 'landing'; render(); }
       }).catch(function (e) { unbusy(); store = store || Local; $app.innerHTML = '<div class="wrap"><p class="note">No se pudo conectar con la nube: ' + esc(e.message) + '</p></div>'; });
     } else { store = Local; boot(); }
   }

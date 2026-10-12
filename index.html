@@ -3,8 +3,11 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Mi Enganche</title>
-  <meta name="description" content="Controla los pagos de enganche, abonos, parqueos y planos de tus apartamentos.">
+  <title>Mi Enganche · Control de enganche y abonos de tu apartamento</title>
+  <meta name="description" content="Lleva el control de tus pagos de enganche, abonos y parqueos. Sube tu cotización en PDF y mira cuánto llevas, cuánto falta y tu cuota del préstamo. Gratis.">
+  <meta property="og:title" content="Mi Enganche · Tu apartamento, siempre bajo control">
+  <meta property="og:description" content="Control de pagos de enganche, abonos, parqueos y planos. Sube tu cotización y empieza gratis.">
+  <meta property="og:type" content="website">
   <meta name="theme-color" content="#090b10">
   <link rel="preload" href="fonts/inter.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/cormorant.woff2" as="font" type="font/woff2" crossorigin>
@@ -18,15 +21,15 @@
       document.documentElement.dataset.theme = t;
       var a = 'gold'; try { a = localStorage.getItem('enganche.accent') || 'gold'; } catch (e) { } document.documentElement.dataset.accent = a; })();
   </script>
-  <link rel="stylesheet" href="styles.css?v=9">
+  <link rel="stylesheet" href="styles.css?v=10">
 </head>
 <body>
   <div id="app"></div>
   <div id="busy" role="status" aria-live="polite"><div class="bx"><div class="bo"></div><p>Un momento…</p></div></div>
   <div id="toast" role="status" aria-live="polite"></div>
-  <script src="config.js?v=9"></script>
-  <script src="calc.js?v=9"></script>
-  <script src="quote.js?v=9"></script>
-  <script src="app.js?v=9"></script>
+  <script src="config.js?v=10"></script>
+  <script src="calc.js?v=10"></script>
+  <script src="quote.js?v=10"></script>
+  <script src="app.js?v=10"></script>
 </body>
 </html>
