@@ -8,6 +8,8 @@ create table if not exists public.projects (
 );
 
 alter table public.projects enable row level security;
+-- Permisos para usuarios con sesión iniciada (necesario si "Automatically expose new tables" está desactivado).
+grant select, insert, update, delete on public.projects to authenticated;
 
 create policy "own select" on public.projects for select using (auth.uid() = user_id);
 create policy "own insert" on public.projects for insert with check (auth.uid() = user_id);
