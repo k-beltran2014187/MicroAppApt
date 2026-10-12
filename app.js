@@ -790,9 +790,8 @@
   }
   function init() {
     applyTheme();
-    if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js').catch(function () { });
-    var hadCtl = !!(navigator.serviceWorker && navigator.serviceWorker.controller), reloaded = false;
-    if (navigator.serviceWorker) navigator.serviceWorker.addEventListener('controllerchange', function () { if (hadCtl && !reloaded) { reloaded = true; location.reload(); } }); // nueva versión lista
+    // Se retiró el guardado sin conexión (service worker): provocaba versiones viejas mezcladas. Limpia restos de versiones anteriores.
+    try { if (navigator.serviceWorker) navigator.serviceWorker.getRegistrations().then(function (rs) { rs.forEach(function (r) { r.unregister(); }); }); if (window.caches) caches.keys().then(function (ks) { ks.forEach(function (k) { caches.delete(k); }); }); } catch (e) { }
     if (CFG.supabaseUrl && CFG.supabaseAnonKey) {
       busy('Conectando…');
       loadScript('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js').then(function () {

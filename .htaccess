@@ -1,0 +1,6 @@
+# Que el navegador y el CDN revisen siempre si hay una versión nueva
+<IfModule mod_headers.c>
+  <FilesMatch "\.(html|js|css|webmanifest)$">
+    Header set Cache-Control "no-cache"
+  </FilesMatch>
+</IfModule>
