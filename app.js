@@ -29,6 +29,7 @@
     layers: '<path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/>', plan: '<path d="M3 3h18v18H3zM3 13h9M12 3v10M16 21v-8h5"/>',
     file: '<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 12h6M9 16h6"/>', out: '<path d="M9 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h4M16 8l4 4-4 4M20 12H9"/>',
     car: '<path d="M5 16V11l2-5h10l2 5v5M3 16h18M7 19v-3M17 19v-3"/><circle cx="8" cy="13" r=".8"/><circle cx="16" cy="13" r=".8"/>', lock: '<rect x="4" y="10" width="16" height="11" rx="3"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14.5v2"/>', sync: '<path d="M20 8a8 8 0 0 0-14-2M4 4v4h4M4 16a8 8 0 0 0 14 2M20 20v-4h-4"/>',
+    credit: '<rect x="3" y="6" width="18" height="13" rx="3"/><path d="M3 10h18M7 15h4"/>',
     grid: '<rect x="3" y="3" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="2"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2"/>',
     home: '<path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/><path d="M10 20v-5h4v5"/>'
   };
@@ -183,6 +184,7 @@
 
   function render() {
     var proj = S.view === 'project' && !S.needAuth ? cur() : null, p = proj;
+    if (p && tabsFor(p).map(function (t) { return t[0]; }).indexOf(S.tab) < 0) S.tab = 'resumen';
     applyTheme(p ? p.color : (S.importDraft ? S.importDraft.project.color : 'gold'));
     if (S.needAuth) return S.gate === 'auth' ? renderAuth() : renderLanding();
     var body = p ? tabsHtml() + '<main><div class="wrap' + (S.anim ? ' enter' : '') + '" id="wrap">' + tabHtml(p) + '</div></main>' : '<main><div class="wrap' + (S.anim ? ' enter' : '') + '" id="wrap">' + (S.projects.length ? homeHtml() : welcomeHtml()) + '</div></main>';
@@ -202,7 +204,7 @@
     Array.prototype.forEach.call($app.querySelectorAll('.path'), function (p) { if (go) requestAnimationFrame(function () { requestAnimationFrame(function () { p.classList.add('go'); }); }); else p.classList.add('go', 'noanim'); });
     if (go) Array.prototype.forEach.call($app.querySelectorAll('[data-cu]'), countUp);
     var orb = $('heroOrb'); if (orb) mountOrbIn(orb, { state: 'reasoning', size: 96, label: 'Mi Enganche' });
-    placeInd(); S.anim = false;
+    bindCharts(); placeInd(); S.anim = false;
   }
   function placeInd() {
     var nav = document.querySelector('nav.tabs'), n = nav && nav.querySelector('.on'), i = nav && nav.querySelector('.ind'); if (!n || !i) return;
@@ -240,38 +242,51 @@
       (store.mode === 'cloud' ? '<button class="ibtn av" data-a="menu" aria-label="Mi cuenta" aria-expanded="' + !!S.menu + '">' + ini + '</button>' : '') +
       '</div>' + (S.menu && store.mode === 'cloud' ? '<div class="menu" id="menu" role="menu"><div class="em">Sesión iniciada como<br><b>' + esc(em) + '</b></div><a href="privacidad.html" target="_blank" rel="noopener">' + ic('file') + ' Aviso de privacidad</a><button data-a="logout">' + ic('out') + ' Cerrar sesión</button></div>' : '') + '</header>';
   }
-  function tabsHtml() { return '<nav class="tabs"><div class="tabs-in">' + TABS.map(function (t) { return '<button data-tab="' + t[0] + '" class="' + (S.tab === t[0] ? 'on' : '') + '">' + t[1] + '</button>'; }).join('') + '<i class="ind"></i></div></nav>'; }
+  function tabsHtml() { var pp = cur(); return '<nav class="tabs"><div class="tabs-in">' + tabsFor(pp).map(function (t) { return '<button data-tab="' + t[0] + '" class="' + (S.tab === t[0] ? 'on' : '') + '">' + t[1] + '</button>'; }).join('') + '<i class="ind"></i></div></nav>'; }
   function welcomeHtml() {
     return migBanner() + '<div class="welcome"><div class="heroorb" id="heroOrb"></div><div class="eyebrow">Control de enganche</div><h1>Tu apartamento, siempre bajo control.</h1>' +
       '<p class="lead">Sube tu cotización y sigue cada cuota, abono y parqueo, con tus planos siempre a la mano.</p>' +
-      '<button class="btn" data-a="new">' + ic('upload') + 'Subir cotización (PDF)</button>' +
+      '<button class="btn" data-a="new-pdf">' + ic('upload') + 'Subir cotización (PDF)</button><p style="margin:16px 0 0"><button class="chip" data-a="new-loan">Ya pago el crédito del banco →</button></p>' +
       '<div class="feats"><div class="feat"><div class="fi">' + ic('scan') + '</div><b>Lee tu cotización</b><span>Toma precio, enganche, cuotas y plazo del PDF en segundos.</span></div>' +
       '<div class="feat"><div class="fi">' + ic('layers') + '</div><b>Enganche, abonos y parqueos</b><span>Cada pago en su lugar, con la cuota del préstamo siempre al día.</span></div>' +
       '<div class="feat"><div class="fi">' + ic('plan') + '</div><b>Planos a la mano</b><span>Guarda los planos de cada proyecto y ábrelos con zoom.</span></div></div>' +
       (store.mode === 'local' ? '<p class="muted" style="margin-top:22px">Modo local: tus datos se guardan solo en este dispositivo.</p>' : '') + '</div>';
   }
-  function tabHtml(p) { var r = C.compute(p); return { resumen: tResumen, pagos: tPagos, calendario: tCalendario, prestamo: tPrestamo, parqueos: tParqueos, planos: tPlanos, proyecto: tProyecto }[S.tab](p, r); }
+  function tabHtml(p) {
+    if (isLoan(p)) { var rl = C.loanCompute(p); var fl = { resumen: tResumenL, pagos: tPagosL, amort: tAmort, simulador: tSim, planos: tPlanos, proyecto: tProyecto }[S.tab] || tResumenL; return fl(p, rl); }
+    var r = C.compute(p); return { resumen: tResumen, pagos: tPagos, calendario: tCalendario, prestamo: tPrestamo, parqueos: tParqueos, planos: tPlanos, proyecto: tProyecto }[S.tab](p, r); }
   function homeHtml() {
-    var rs = S.projects.map(function (p) { return { p: p, r: C.compute(p) }; });
-    var paid = rs.reduce(function (t, x) { return t + x.r.paidEng; }, 0), rem = rs.reduce(function (t, x) { return t + x.r.remEng; }, 0), ab = rs.reduce(function (t, x) { return t + x.r.abonos; }, 0);
-    var h = migBanner() + '<div class="home-head"><div class="eyebrow">Mi portafolio</div><h1 class="hero-title">Mis proyectos</h1><p class="muted">' + rs.length + (rs.length === 1 ? ' apartamento en proceso' : ' apartamentos en proceso') + '</p></div>';
-    if (rs.length > 1) h += '<div class="grid">' + stat('Pagado', cq(paid), 'en enganches, en total', 'hero') + stat('Falta', cq(rem), 'de enganche, en total') + stat('Abonado', cq(ab), 'a capital', 'abono') + '</div>';
+    var rs = S.projects.map(function (p) { return { p: p, loan: isLoan(p), r: isLoan(p) ? C.loanCompute(p) : C.compute(p) }; });
+    var eng = rs.filter(function (x) { return !x.loan; }), lns = rs.filter(function (x) { return x.loan && x.r.ok; });
+    var paid = eng.reduce(function (t, x) { return t + x.r.paidEng; }, 0), rem = eng.reduce(function (t, x) { return t + x.r.remEng; }, 0), ab = eng.reduce(function (t, x) { return t + x.r.abonos; }, 0), debt = lns.reduce(function (t, x) { return t + x.r.saldo; }, 0);
+    var h = migBanner() + '<div class="home-head"><div class="eyebrow">Mi portafolio</div><h1 class="hero-title">Mis proyectos</h1><p class="muted">' + rs.length + (rs.length === 1 ? ' apartamento' : ' apartamentos') + (lns.length ? ' · ' + lns.length + (lns.length === 1 ? ' con crédito' : ' con crédito') : '') + '</p></div>';
+    var tiles = [];
+    if (eng.length > 1) tiles = [stat('Pagado', cq(paid), 'en enganches, en total', 'hero'), stat('Falta', cq(rem), 'de enganche, en total'), stat('Abonado', cq(ab), 'a capital', 'abono')];
+    if (lns.length) tiles.push(stat('Debes al banco', cq(debt), lns.length > 1 ? 'entre tus ' + lns.length + ' créditos' : 'saldo de tu crédito', eng.length > 1 ? '' : 'hero'));
+    if (tiles.length > 1 || (tiles.length && lns.length && eng.length)) h += '<div class="grid">' + tiles.join('') + '</div>';
     h += '<div class="pgrid">' + rs.map(function (x) {
-      var p = x.p, r = x.r, nx = r.next;
-      return '<button class="pcard" data-accent="' + accentOf(p.color) + '" data-a="open" data-id="' + p.id + '"><div class="pc-top">' + lg(p, 'm') + '<div class="pc-t"><b>' + esc(p.name || 'Proyecto') + '</b><span>' + esc([p.unit ? 'Apto ' + p.unit : '', p.bank].filter(Boolean).join(' · ')) + '</span></div><span class="pc-pct">' + Math.round(r.pctEng) + '<small>%</small></span></div>' +
+      var p = x.p, r = x.r, head = '<button class="pcard" data-accent="' + accentOf(p.color) + '" data-a="open" data-id="' + p.id + '"><div class="pc-top">' + lg(p, 'm') + '<div class="pc-t"><b>' + esc(p.name || 'Proyecto') + '</b><span>' + esc([p.unit ? 'Apto ' + p.unit : '', p.bank].filter(Boolean).join(' · ')) + '</span></div>';
+      if (x.loan) {
+        if (!r.ok) return head + '</div><p class="muted" style="margin:16px 0 0">Crédito sin completar. Toca para agregar los datos del préstamo.</p></button>';
+        return head + '<span class="pc-pct">' + Math.round(r.pctPaid) + '<small>%</small></span></div><div class="bar"><i data-w="' + r.pctPaid.toFixed(1) + '"></i></div>' +
+          '<div class="pc-nums"><div><small>Debes</small><b>' + mh(r.saldo) + '</b></div><div><small>Pagado al capital</small><b>' + mh(r.capitalPaid) + '</b></div></div>' +
+          '<div class="pc-foot"><span>' + ic('calendar') + ' ' + (r.next ? 'Cuota ' + r.next.n + ' · ' + fmtMonth(r.next.month) : 'Crédito pagado') + '</span><span><span class="tag" style="background:rgba(var(--a-rgb),.15);color:var(--acc)">Crédito</span></span></div></button>';
+      }
+      var nx = r.next;
+      return head + '<span class="pc-pct">' + Math.round(r.pctEng) + '<small>%</small></span></div>' +
         '<div class="bar"><i data-w="' + r.pctEng.toFixed(1) + '"></i></div>' +
         '<div class="pc-nums"><div><small>Pagado</small><b>' + mh(r.paidEng) + '</b></div><div><small>Falta</small><b>' + mh(r.remEng) + '</b></div></div>' +
         '<div class="pc-foot"><span>' + (nx ? ic('calendar') + ' ' + esc(nx.label) + (nx.month ? ' · ' + fmtMonth(nx.month) : '') : ic('check') + ' Enganche completo') + '</span><span>' + r.cuotasPagadas + '/' + r.months + ' cuotas</span></div></button>';
-    }).join('') + '<button class="pcard add" data-a="new"><span class="pa-i">' + ic('plus') + '</span><b>Nuevo proyecto</b><span class="muted">Sube una cotización en PDF</span></button></div>';
+    }).join('') + '<button class="pcard add" data-a="new"><span class="pa-i">' + ic('plus') + '</span><b>Nuevo proyecto</b><span class="muted">Enganche o crédito del banco</span></button></div>';
     return h;
   }
   function stat(l, v, sub, cls) { return '<div class="stat ' + (cls || '') + '"><small>' + l + '</small><b>' + v + '</b>' + (sub ? '<span class="sub">' + sub + '</span>' : '') + '</div>'; }
   var RING = 439.82;
-  function ringHtml(pct) {
+  function ringHtml(pct, cap) {
     var off = RING * (1 - Math.min(100, pct) / 100);
     return '<div class="ring"><svg viewBox="0 0 160 160" aria-hidden="true"><defs><linearGradient id="rg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" style="stop-color:var(--a1b)"/><stop offset="1" style="stop-color:var(--a2)"/></linearGradient></defs>' +
       '<circle class="tr" cx="80" cy="80" r="70"/><circle class="pg" cx="80" cy="80" r="70" data-off="' + off.toFixed(2) + '" style="--off:' + off.toFixed(2) + '"/></svg>' +
-      '<div class="ct"><b><span data-cu="' + pct.toFixed(1) + '" data-k="n">' + Math.round(pct) + '</span><sup>%</sup></b><span class="cap">del enganche</span></div></div>';
+      '<div class="ct"><b><span data-cu="' + pct.toFixed(1) + '" data-k="n">' + Math.round(pct) + '</span><sup>%</sup></b><span class="cap">' + (cap || 'del enganche') + '</span></div></div>';
   }
   function pathHtml(r) {
     var segs = r.schedule.map(function (s, i) {
@@ -285,6 +300,7 @@
     var h = '';
     if (!p.price || !p.cuotaEnganche) h += '<div class="note">Faltan datos del proyecto (precio o cuota de enganche). Complétalos en la pestaña <b>Proyecto</b>.</div>';
     if (r.overpaid) h += '<div class="note">Has registrado ' + Q(r.overpaid) + ' más de lo que pide el enganche. Si fue un abono, muévelo a la columna “Abono”.</div>';
+    if (r.schedule.length && r.cuotasFaltan === 0 && r.remEng <= 0) h += '<div class="card next"><div class="ic">' + ic('check') + '</div><div class="tx"><b>¡Enganche completo!</b><span>Ya puedes empezar a seguir tu crédito del banco.</span></div><button class="btn sm" data-a="to-loan">Pasar a crédito</button></div>';
     var eyebrow = [p.unit ? 'Apto ' + p.unit : '', p.bank].filter(Boolean).join(' · ');
     h += '<section class="card hero"><div class="hero-grid"><div class="hero-text">' + (p.logo ? '<div class="hero-logo">' + lg(p, 'l') + '</div>' : '') + (eyebrow ? '<div class="eyebrow">' + esc(eyebrow) + '</div>' : '') +
       '<h1 class="hero-title">' + esc(p.name || 'Mi proyecto') + '</h1><div class="hero-meta">' + (p.size ? '<span>' + p.size + ' m²</span>' : '') + '<span>Precio ' + Q(p.price) + '</span></div>' +
@@ -490,7 +506,9 @@
       })();
     }).catch(function (e) { vb.textContent = 'No se pudo mostrar el PDF: ' + (e.message || e); });
   }
-  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && V) closeViewer(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && V) closeViewer(); if (e.key === 'Escape') closeSheet(); });
+  var rzT, rzW = document.documentElement.clientWidth;
+  window.addEventListener('resize', function () { clearTimeout(rzT); rzT = setTimeout(function () { var w = document.documentElement.clientWidth; if (w !== rzW && document.querySelector('.chart')) { rzW = w; S.anim = false; render(); } rzW = w; }, 250); });
 
   /* ---------- formularios del proyecto ---------- */
   function field(id, l, v, type) { return '<div><label>' + l + '<input id="' + id + '" type="' + (type || 'text') + '"' + (type === 'number' ? ' inputmode="decimal" step="any"' : '') + ' value="' + esc(v == null ? '' : v) + '"></label></div>'; }
@@ -511,13 +529,19 @@
     o.enganchePct = o.price ? C.r2(o.engancheTotal / o.price * 100) : 0;
     return o;
   }
+  function stageCard(p) {
+    return isLoan(p)
+      ? '<div class="card"><h2>Etapa del proyecto</h2><p class="muted">Este proyecto está en la <b>etapa de crédito</b> (cuotas del banco).</p><div class="actions"><button class="btn ghost sm" data-a="to-enganche">Volver a la etapa de enganche</button></div></div>'
+      : '<div class="card"><h2>Etapa del proyecto</h2><p class="muted">Este proyecto está en la <b>etapa de enganche</b>. Cuando termines de pagarlo, pásalo a la etapa de crédito para seguir tus cuotas del banco.</p><div class="actions"><button class="btn sec" data-a="to-loan">Pasar a la etapa de crédito</button></div></div>';
+  }
   function tProyecto(p) {
     return '<div class="card"><h2>Logo del proyecto</h2><div class="logo-row">' + lg(p, 'l') + '<div><p class="muted" style="margin-bottom:10px">Aparece en el encabezado y en tu página de inicio.</p><div class="actions" style="margin-top:0"><button class="btn sec sm" data-a="logo-up">' + ic('upload') + ' Subir imagen</button>' + (p.logo ? '<button class="btn ghost sm" data-a="logo-del">Quitar</button>' : '') + '</div></div></div></div>' +
       '<div class="card"><h2>Apariencia</h2><label>Tema</label><div class="seg2" id="themeSeg">' +
       ['auto', 'light', 'dark'].map(function (k) { return '<button data-a="theme-set" data-v="' + k + '" class="' + (themePref === k ? 'on' : '') + '">' + THEME_ICON[k] + THEME_NAME[k] + '</button>'; }).join('') + '</div>' +
       '<p class="muted" style="margin:8px 0 0">El color se elige por proyecto, abajo en “Datos del proyecto”.</p></div>' +
-      '<div class="card"><h2>Datos del proyecto</h2>' + formFields(p, 'p_') + '<div class="actions"><button class="btn" data-a="save-proj">Guardar</button></div></div>' +
-      '<div class="card"><h2>Cotización</h2><p class="muted">Sube otra cotización para reemplazar los datos de este proyecto. Tus pagos no se borran.</p><div class="actions"><button class="btn sec" data-a="import-update">Subir cotización (PDF)</button></div></div>' +
+      stageCard(p) +
+      '<div class="card"><h2>' + (isLoan(p) ? 'Datos del crédito' : 'Datos del proyecto') + '</h2>' + (isLoan(p) ? loanFields(p, 'p_') : formFields(p, 'p_')) + '<div class="actions"><button class="btn" data-a="save-proj">Guardar</button></div></div>' +
+      (isLoan(p) ? '' : '<div class="card"><h2>Cotización</h2><p class="muted">Sube otra cotización para reemplazar los datos de este proyecto. Tus pagos no se borran.</p><div class="actions"><button class="btn sec" data-a="import-update">Subir cotización (PDF)</button></div></div>') +
       '<div class="card"><h2>Respaldo y zona peligrosa</h2><p class="muted">El respaldo incluye proyectos y pagos; los planos no (quedan guardados aparte).</p><div class="actions"><button class="btn ghost" data-a="export">Descargar respaldo (JSON)</button><button class="btn ghost" data-a="restore">Restaurar respaldo</button><button class="btn danger" data-a="del-proj">Eliminar este proyecto</button></div></div>';
   }
 
@@ -610,14 +634,14 @@
   }
   function openDraft(p, fromPdf) { S.importDraft = { project: p, isNew: true }; showDraft(fromPdf); }
   function showDraft(fromPdf) {
-    var d = S.importDraft; applyTheme(d.project.color);
-    $app.innerHTML = headerHtml() + '<main><div class="wrap enter" id="wrap"><div class="card"><h2>' + (fromPdf ? 'Revisa los datos de la cotización' : 'Nuevo proyecto') + '</h2>' +
+    var d = S.importDraft, loan = d.kind === 'loan'; applyTheme(d.project.color);
+    $app.innerHTML = headerHtml() + '<main><div class="wrap enter" id="wrap"><div class="card"><h2>' + (loan ? (d.converting ? 'Pasa a la etapa de crédito' : 'Tu crédito del banco') : fromPdf ? 'Revisa los datos de la cotización' : 'Nuevo proyecto') + '</h2>' +
       (d.notes || []).map(function (n) { return '<div class="note">' + esc(n) + '</div>'; }).join('') +
       (fromPdf ? '<p class="muted">Estos datos se leyeron del PDF. Corrige lo que haga falta y guarda. “Mes de la 1.ª cuota” es el mes en que empiezas a pagar las cuotas fraccionadas.</p>' : '') +
       '<label>Logo del proyecto</label><div class="logos" id="logos"></div>' +
-      formFields(d.project, 'd_') + '<div class="actions"><button class="btn" data-a="draft-save">Guardar</button><button class="btn ghost" data-a="draft-cancel">Cancelar</button>' +
-      (!fromPdf ? '<button class="btn sec" data-a="draft-pdf">Mejor subir cotización PDF</button>' : '') + '</div></div></div></main>';
-    S.anim = true; bind(); post(); renderLogos();
+      (loan ? loanFields(d.project, 'd_', { paid: d.converting ? 0 : monthsBetween((d.project.loan || {}).startMonth, C.curMonth()) }) : formFields(d.project, 'd_')) + '<div class="actions"><button class="btn" data-a="draft-save">Guardar</button><button class="btn ghost" data-a="draft-cancel">Cancelar</button>' +
+      (!fromPdf && !loan ? '<button class="btn sec" data-a="draft-pdf">Mejor subir cotización PDF</button>' : '') + '</div></div></div></main>';
+    S.anim = true; bind(); post(); renderLogos(); if (loan) bindLoanDraft();
   }
   function renderLogos() {
     var box = $('logos'), d = S.importDraft; if (!box || !d) return; var cur0 = d.project.logo || '';
@@ -642,12 +666,12 @@
   function landingHtml() {
     var steps = [['1', 'Sube tu cotización', 'Arrastra el PDF que te dio la desarrolladora. La app lee el precio, el enganche, las cuotas, el plazo y hasta el logo del proyecto.'],
       ['2', 'Registra tus pagos', 'Uno por uno o varios meses de golpe. El enganche, los abonos y los parqueos van cada uno en su lugar.'],
-      ['3', 'Mira tu avance', 'Cuánto llevas, cuánto falta, cuántas cuotas quedan y cómo cambia tu cuota del préstamo si abonas.']];
+      ['3', 'Sigue tu avance, hasta la última cuota', 'Cuánto llevas, cuánto falta y, cuando empiezas a pagar al banco, cuánto debes y cuánto te ahorrarías con un abono.']];
     var feats = [['scan', 'Lee tu cotización', 'Sube el PDF y se llena solo. Si el formato es distinto, lo completas a mano en un minuto.'], ['layers', 'Enganche y abonos separados', 'Los abonos extra no se mezclan con el enganche: reducen el capital y recalculan tu cuota.'],
       ['car', 'Parqueos aparte', 'Registra los que compras por separado o los que ya van incluidos en el precio.'], ['plan', 'Tus planos, siempre contigo', 'Guarda los planos de cada proyecto y ábrelos con zoom desde el teléfono.'],
-      ['grid', 'Varios proyectos', 'Cada apartamento con su logo y su color, todos en una sola página de inicio.'], ['sync', 'En tu teléfono y tu computadora', 'Entra con tu cuenta desde cualquier dispositivo y encuentra todo igual.']];
+      ['credit', 'Y después, tu crédito del banco', 'Al terminar el enganche, sigue tu préstamo: cuánto debes, intereses, tabla de amortización y cuánto ahorras si abonas.'], ['sync', 'Todos tus proyectos, en cualquier dispositivo', 'Cada apartamento con su logo y color, y tu cuenta igual en el teléfono y en la computadora.']];
     var faq = [['¿Cuánto cuesta?', 'Es gratis. Creas tu cuenta con tu correo y empiezas a usarla.'], ['¿Necesito la cotización en PDF?', 'No es obligatoria. Si la subes, la app llena los datos por ti; si no, los escribes tú.'],
-      ['¿Quién puede ver mis datos?', 'Solo tú. Cada cuenta ve únicamente su propia información, y la conexión es cifrada. Puedes borrar tus proyectos cuando quieras.'], ['¿Sirve para cualquier apartamento?', 'Sí. Funciona con cualquier proyecto que fraccione el enganche en cuotas, con o sin reserva, y con o sin parqueo.'],
+      ['¿Quién puede ver mis datos?', 'Solo tú. Cada cuenta ve únicamente su propia información, y la conexión es cifrada. Puedes borrar tus proyectos cuando quieras.'], ['¿Sirve cuando ya estoy pagando el crédito del banco?', 'Sí. Al terminar el enganche pasas el proyecto a la etapa de crédito: ves tu saldo, los intereses pagados y por pagar, la tabla de amortización y puedes simular abonos. También puedes empezar directo en esa etapa.'], ['¿Sirve para cualquier apartamento?', 'Sí. Funciona con cualquier proyecto que fraccione el enganche en cuotas, con o sin reserva, y con o sin parqueo.'],
       ['¿Reemplaza a mi desarrolladora o a mi banco?', 'No. Es una herramienta para que tú lleves tu propio control. Los saldos oficiales siempre son los de la desarrolladora y el banco.']];
     return '<header class="top lp-nav"><div class="wrap"><span class="brand"><span class="mark">' + ic('home') + '</span><span class="wm">Mi Enganche</span></span>' +
       '<button class="ibtn" data-a="theme" aria-label="Cambiar tema">' + THEME_ICON[themePref] + '</button><button class="btn ghost sm" data-a="go-auth" data-id="login">Entrar</button><button class="btn sm" data-a="go-auth" data-id="signup">Crear cuenta</button></div></header>' +
@@ -726,12 +750,215 @@
     }).catch(function (e) { unbusy(); renderAuth(trErr(e && e.message)); });
   }
 
+  /* ---------- etapa de crédito (cuotas del banco) ---------- */
+  var isLoan = function (p) { return !!p && p.phase === 'credito'; };
+  var TABS_L = [['resumen', 'Resumen'], ['pagos', 'Pagos'], ['amort', 'Amortización'], ['simulador', 'Simulador'], ['planos', 'Planos'], ['proyecto', 'Proyecto']];
+  var tabsFor = function (p) { return isLoan(p) ? TABS_L : TABS; };
+  var monthsBetween = function (a, b) { if (!a || !b) return 0; var x = a.split('-'), y = b.split('-'); return Math.max(0, (+y[0] - +x[0]) * 12 + (+y[1] - +x[1])); };
+  var cp = function (v) { v = +v || 0; return '<span data-cu="' + v.toFixed(1) + '" data-k="p">' + v.toFixed(1) + '%</span>'; };
+  var plural = function (n, a, b) { return n + ' ' + (n === 1 ? a : b); };
+  var spanYM = function (m) { var y = Math.floor(m / 12), mm = m % 12; return [y ? plural(y, 'año', 'años') : '', mm ? plural(mm, 'mes', 'meses') : ''].filter(Boolean).join(' y ') || '0 meses'; };
+
+  function pathYearsHtml(r) {
+    var n = Math.ceil(r.totalRows / 12), segs = '';
+    for (var i = 0; i < n; i++) { var f = Math.max(0, Math.min(1, (r.paidRows - i * 12) / 12)); segs += '<i class="seg ' + (f >= 1 ? 'on' : f > 0 ? 'part' : '') + '" style="--i:' + i + ';--p:' + f.toFixed(2) + '" data-tip="Año ' + (i + 1) + '"></i>'; }
+    return '<div class="path" aria-label="Avance por año">' + segs + '</div><div class="path-cap"><span>' + spanYM(r.totalRows) + ' de plazo</span><span>' + r.paidRows + ' pagadas · ' + r.remRows + ' por pagar</span></div>';
+  }
+
+  function tResumenL(p, r) {
+    if (!r.ok) return '<div class="card"><h2>Completa los datos de tu crédito</h2><p class="muted">Faltan el monto del préstamo, la tasa, el plazo o el mes de la primera cuota.</p><div class="actions"><button class="btn" data-a="edit-loan">Completar datos</button></div></div>';
+    var h = '', late = r.rows.filter(function (x) { return x.status === 'vencida'; }).length;
+    if (late) h += '<div class="note">Hay ' + plural(late, 'cuota', 'cuotas') + ' sin registrar. Anótalas en <b>Pagos</b> (puedes agregar varios meses de una vez).</div>';
+    var eyebrow = [p.unit ? 'Apto ' + p.unit : '', p.bank, 'Crédito'].filter(Boolean).join(' · ');
+    h += '<section class="card hero"><div class="hero-grid"><div class="hero-text">' + (p.logo ? '<div class="hero-logo">' + lg(p, 'l') + '</div>' : '') + '<div class="eyebrow">' + esc(eyebrow) + '</div>' +
+      '<h1 class="hero-title">' + esc(p.name || 'Mi proyecto') + '</h1><div class="hero-meta">' + (p.size ? '<span>' + p.size + ' m²</span>' : '') + '<span>Préstamo original ' + Q(r.principal) + '</span></div>' +
+      '<div class="kpis"><div class="kpi"><small>Debes</small><b>' + cq(r.saldo) + '</b></div><div class="kpi"><small>Ya pagaste al capital</small><b>' + cq(r.capitalPaid) + '</b></div>' +
+      (r.price ? '<div class="kpi"><small>Tu parte del apto</small><b>' + cp(r.pctOwned) + '</b></div>' : '') + '</div></div>' + ringHtml(r.pctPaid, 'del préstamo') + '</div>' + pathYearsHtml(r) + '</section>';
+    var nx = r.next;
+    if (nx) h += '<div class="card next"><div class="ic">' + ic('calendar') + '</div><div class="tx"><b>Próxima cuota · ' + fmtMonth(nx.month) + '</b><span>Capital ' + Q(nx.principal) + ' · Interés ' + Q(nx.interest) + (r.fixed ? ' · IUSI/seguro ' + Q(r.fixed) : '') +
+      (nx.status === 'vencida' ? ' <span class="tag" style="background:rgba(240,112,127,.15);color:var(--bad)">Atrasada</span>' : '') + '</span></div><div class="am">' + Q(Math.max(0, nx.need - nx.paid)) + '</div></div>';
+    else h += '<div class="card next"><div class="ic">' + ic('check') + '</div><div class="tx"><b>¡Crédito pagado!</b><span>Terminaste de pagar tu apartamento. Felicidades.</span></div></div>';
+    h += '<div class="grid">' +
+      stat('Cuotas pagadas', cn(r.paidRows) + '<small style="display:inline;font-size:.5em;letter-spacing:0;color:var(--mut);margin-left:6px;font-family:var(--sans)">de ' + r.totalRows + '</small>', 'meses al día con el banco', 'ok') +
+      stat('Te faltan', cn(r.remRows) + '<small style="display:inline;font-size:.5em;letter-spacing:0;color:var(--mut);margin-left:6px;font-family:var(--sans)">cuotas</small>', r.endMonth ? 'terminas en ' + fmtMonth(r.endMonth) : '') +
+      stat('Cuota mensual', cq(r.totalMonthly), 'al banco' + (r.maint ? ' · + ' + Q(r.maint) + ' de mantenimiento' : ''), 'hero') +
+      stat('Intereses pagados', cq(r.interestPaid), 'de ' + Q(r.interestTotal) + ' en total') +
+      stat('Intereses por pagar', cq(r.interestRem), 'si sigues este plan') +
+      (r.abonosTotal ? stat('Abonado a capital', cq(r.abonosTotal), (r.interestSaved ? 'te ahorra ' + Q(r.interestSaved) + ' de interés' : '') + (r.monthsSaved ? ' · ' + spanYM(r.monthsSaved) + ' menos' : ''), 'abono') : '') +
+      (r.price ? stat('Tu parte del apto', cq(r.owned), 'de ' + Q(r.price) + ' de valor') : '') + '</div>';
+    h += '<div class="card"><h2>Saldo de tu préstamo</h2><p class="muted" style="margin:-4px 0 10px">Cuánto capital te falta pagar con el tiempo. <a href="#" data-a="goto-tab" data-id="amort" class="lnk">Ver tabla</a></p>' + balanceChart(r) + '</div>';
+    h += '<div class="card"><h2>¿Cuánto es capital y cuánto intereses?</h2>' + splitBar(r) + '</div>';
+    return h;
+  }
+
+  /* gráfica de saldo: área de una serie (+ comparación sin abonos), cruz de lectura y tooltip */
+  var chartSeq = 0;
+  function niceStep(max, ticks) { var raw = max / ticks, pow = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / pow; return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * pow; }
+  var compact = function (v) { return v >= 1e6 ? 'Q ' + (Math.round(v / 1e5) / 10) + ' M' : v >= 1e3 ? 'Q ' + Math.round(v / 1e3) + ' K' : 'Q ' + Math.round(v); };
+  function balanceChart(r) {
+    var cw = document.documentElement.clientWidth || 390, W = Math.max(280, Math.min(940, cw - 70)), H = W < 520 ? 230 : 290, m = { l: W < 520 ? 52 : 62, r: 14, t: 24, b: 30 }, pw = W - m.l - m.r, ph = H - m.t - m.b;
+    var rows = r.rows, base = r.abonosTotal > 0 && r.baseRows && r.baseRows.length ? r.baseRows : null, N = Math.max(rows.length, base ? base.length : 0), max = r.principal || 1, start = rows[0].month;
+    var X = function (i) { return m.l + (N ? i / N * pw : 0); }, Y = function (v) { return m.t + ph - Math.min(1, Math.max(0, v / max)) * ph; };
+    var vals = [r.principal].concat(rows.map(function (x) { return x.balance; })), bvals = base ? [r.principal].concat(base.map(function (x) { return x.balance; })) : null;
+    var line = function (a) { return a.map(function (v, i) { return (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(v).toFixed(1); }).join(''); };
+    var step = niceStep(max, 4), grid = '', g;
+    for (g = 0; g <= max * 1.001; g += step) grid += '<line class="gl" x1="' + m.l + '" x2="' + (W - m.r) + '" y1="' + Y(g).toFixed(1) + '" y2="' + Y(g).toFixed(1) + '"/><text class="ax" x="' + (m.l - 8) + '" y="' + (Y(g) + 4).toFixed(1) + '" text-anchor="end">' + compact(g) + '</text>';
+    var ystep = 12 * Math.max(1, Math.ceil(N / 12 / (W < 520 ? 4 : 7))), xt = '', i;
+    for (i = 0; i <= N; i += ystep) xt += '<text class="ax" x="' + X(i).toFixed(1) + '" y="' + (H - 8) + '" text-anchor="' + (i === 0 ? 'start' : 'middle') + '">' + C.addMonths(start, i).slice(0, 4) + '</text>';
+    var td = Math.min(r.paidRows, vals.length - 1), tx = X(td), ty = Y(r.saldo), onRight = tx > W * 0.6;
+    var area = line(vals) + 'L' + X(vals.length - 1).toFixed(1) + ' ' + Y(0).toFixed(1) + 'L' + X(0).toFixed(1) + ' ' + Y(0).toFixed(1) + 'Z';
+    var id = 'ch' + (++chartSeq); S.charts = S.charts || {}; S.charts[id] = { W: W, m: m, N: N, pw: pw, X: X, Y: Y, vals: vals, bvals: bvals, start: start, today: td };
+    return '<div class="chart" id="' + id + '" tabindex="0" role="group" aria-label="Saldo del préstamo: de ' + Q(r.principal) + ' hoy ' + Q(r.saldo) + ' hasta cero en ' + fmtMonth(r.endMonth) + '. Con las flechas puedes recorrer mes a mes.">' +
+      '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" role="img" aria-hidden="true">' + grid + xt + '<path class="ar" d="' + area + '"/>' + (bvals ? '<path class="ln lb" d="' + line(bvals) + '"/>' : '') + '<path class="ln lm" d="' + line(vals) + '"/>' +
+      '<circle class="dot" cx="' + tx.toFixed(1) + '" cy="' + ty.toFixed(1) + '" r="5"/><text class="tl" x="' + (onRight ? tx - 9 : tx + 9).toFixed(1) + '" y="' + (ty - 10).toFixed(1) + '" text-anchor="' + (onRight ? 'end' : 'start') + '">Hoy · ' + compact(r.saldo) + '</text>' +
+      '<line class="xh" y1="' + m.t + '" y2="' + (m.t + ph) + '" style="display:none"/><circle class="d1" r="5" style="display:none"/><circle class="d2" r="4" style="display:none"/><rect class="hit" x="' + m.l + '" y="' + m.t + '" width="' + pw + '" height="' + ph + '"/></svg><div class="ctip" role="status"></div></div>' +
+      (bvals ? '<div class="legend"><span><i class="lk" style="background:var(--cap)"></i>Saldo con tus abonos</span><span><i class="lk" style="background:var(--mut)"></i>Sin abonos</span></div>' : '');
+  }
+  function bindCharts() {
+    Array.prototype.forEach.call($app.querySelectorAll('.chart'), function (el) {
+      var s = S.charts && S.charts[el.id]; if (!s) return;
+      var svg = el.querySelector('svg'), xh = el.querySelector('.xh'), d1 = el.querySelector('.d1'), d2 = el.querySelector('.d2'), tip = el.querySelector('.ctip'), idx = null;
+      function row(color, label, value) { var d = document.createElement('div'); d.className = 'tr'; var k = document.createElement('i'); k.className = 'lk'; k.style.background = color; var l = document.createElement('span'); l.textContent = label; var v = document.createElement('b'); v.textContent = value; d.appendChild(k); d.appendChild(l); d.appendChild(v); return d; }
+      function show(i) {
+        i = Math.max(0, Math.min(s.vals.length - 1, i)); idx = i; var x = s.X(i);
+        xh.setAttribute('x1', x); xh.setAttribute('x2', x); xh.style.display = ''; d1.setAttribute('cx', x); d1.setAttribute('cy', s.Y(s.vals[i])); d1.style.display = '';
+        if (s.bvals) { var bi = Math.min(i, s.bvals.length - 1); d2.setAttribute('cx', x); d2.setAttribute('cy', s.Y(s.bvals[bi])); d2.style.display = ''; }
+        tip.textContent = ''; var t = document.createElement('div'); t.className = 'tm'; t.textContent = i === 0 ? 'Inicio del crédito' : fmtMonth(C.addMonths(s.start, i - 1)) + ' · cuota ' + i; tip.appendChild(t);
+        tip.appendChild(row('var(--cap)', s.bvals ? 'Con tus abonos' : 'Saldo', Q(s.vals[i])));
+        if (s.bvals) tip.appendChild(row('var(--mut)', 'Sin abonos', Q(s.bvals[Math.min(i, s.bvals.length - 1)])));
+        var frac = x / s.W; tip.style.left = (frac * 100) + '%'; tip.style.transform = 'translateX(' + (frac > .6 ? '-104%' : '4%') + ')'; tip.classList.add('on');
+      }
+      function hide() { idx = null; xh.style.display = 'none'; d1.style.display = 'none'; d2.style.display = 'none'; tip.classList.remove('on'); }
+      svg.addEventListener('pointermove', function (e) { var rc = svg.getBoundingClientRect(); show(Math.round(((e.clientX - rc.left) / rc.width * s.W - s.m.l) / s.pw * s.N)); });
+      svg.addEventListener('pointerleave', function (e) { if (e.pointerType !== 'touch') hide(); });
+      el.addEventListener('keydown', function (e) { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); show((idx == null ? s.today : idx) + (e.key === 'ArrowLeft' ? -1 : 1)); } else if (e.key === 'Escape') hide(); });
+      el.addEventListener('blur', hide);
+    });
+  }
+  function splitBar(r) {
+    var tot = r.principal + r.interestTotal, pc = tot ? r.principal / tot * 100 : 0, pi = 100 - pc;
+    return '<div class="stackbar" role="img" aria-label="Capital ' + pc.toFixed(0) + '% e intereses ' + pi.toFixed(0) + '% del total a pagar"><i class="sb cap" data-tip="Capital: ' + Q(r.principal) + ' (' + pc.toFixed(1) + '%)" style="flex:' + pc.toFixed(2) + '"></i><i class="sb int" data-tip="Intereses: ' + Q(r.interestTotal) + ' (' + pi.toFixed(1) + '%)" style="flex:' + pi.toFixed(2) + '"></i></div>' +
+      '<div class="legend big"><span><i class="lk" style="background:var(--cap)"></i><b>Capital</b> ' + Q(r.principal) + ' · ' + pc.toFixed(0) + '%</span><span><i class="lk" style="background:var(--int)"></i><b>Intereses</b> ' + Q(r.interestTotal) + ' · ' + pi.toFixed(0) + '%</span></div>' +
+      '<p class="muted" style="margin:12px 0 0">En total pagarías ' + Q(tot) + ' al banco por un préstamo de ' + Q(r.principal) + '. De cada Q100 que pagas, Q' + pi.toFixed(0) + ' son intereses.</p>';
+  }
+  // tooltip genérico para marcas con data-tip (barras, segmentos)
+  var gtip = null;
+  document.addEventListener('pointerover', function (e) { var t = e.target.closest && e.target.closest('[data-tip]'); if (!t) return; if (!gtip) { gtip = document.createElement('div'); gtip.id = 'gtip'; document.body.appendChild(gtip); } gtip.textContent = t.dataset.tip; var rc = t.getBoundingClientRect(); gtip.style.left = Math.min(window.innerWidth - 12, Math.max(12, rc.left + rc.width / 2)) + 'px'; gtip.style.top = (rc.top - 8) + 'px'; gtip.classList.add('on'); });
+  document.addEventListener('pointerout', function (e) { if (gtip && e.target.closest && e.target.closest('[data-tip]')) gtip.classList.remove('on'); });
+
+  function tPagosL(p, r) {
+    var L = p.loan || {}, e = S.editing ? (L.payments || []).filter(function (x) { return x.id === S.editing; })[0] : null, due = r.ok ? (r.next ? Math.max(0, r.next.need - r.next.paid) : r.totalMonthly) : 0;
+    var h = '<div class="card"><h2>' + (e ? 'Editar pago' : 'Registrar pago de la cuota') + '</h2><div class="row"><div><label>Fecha<input type="date" id="lp_date" value="' + (e ? e.date : today()) + '"></label></div>' +
+      '<div><label>Monto pagado al banco (Q)<input type="number" inputmode="decimal" step="0.01" id="lp_amt" value="' + (e ? e.amount : '') + '" placeholder="' + (due ? due.toFixed(2) : '0.00') + '"></label></div></div>' +
+      '<label style="margin-top:10px">Nota (opcional)<input id="lp_note" value="' + esc(e ? e.note : '') + '" placeholder="Ej. débito automático, boleta 1234"></label>' +
+      (due ? '<div class="chips"><span class="muted">Atajo:</span><button class="chip" data-a="fill-lp" data-id="' + due.toFixed(2) + '">Cuota ' + Q(due) + '</button></div>' : '') +
+      '<p class="muted" style="margin:8px 0 0">Es lo que pagas al banco cada mes (cuota' + (r.fixed ? ' + IUSI y seguro' : '') + ').</p>' +
+      '<div class="actions"><button class="btn" data-a="lp-save">' + (e ? 'Guardar cambios' : 'Agregar pago') + '</button>' + (e ? '<button class="btn ghost" data-a="cancel-edit">Cancelar</button>' : '') + '</div></div>';
+    if (!e) {
+      var first = r.next ? r.next.month : C.curMonth();
+      h += '<div class="card"><details><summary>Registrar varios meses de una vez</summary><p class="muted">Útil si no has anotado tus pagos anteriores. Crea un pago por mes con el mismo monto.</p><div class="row">' +
+        '<div><label>Primer mes<input type="month" id="lb_start" value="' + first + '"></label></div><div><label>Cantidad de meses<input type="number" inputmode="numeric" min="1" max="360" id="lb_n" value="' + Math.max(1, Math.min(24, r.rows.filter(function (x) { return x.status === 'vencida'; }).length || 3)) + '"></label></div>' +
+        '<div><label>Monto por mes (Q)<input type="number" inputmode="decimal" step="0.01" id="lb_amt" value="' + (r.ok ? r.totalMonthly : '') + '"></label></div></div><div class="actions"><button class="btn sec" data-a="lb-save">Agregar todos</button></div></details></div>';
+      h += '<div class="card"><h2>Abono extra a capital</h2><p class="muted">Un pago adicional para bajar tu deuda. Pregunta a tu banco si el abono reduce el <b>plazo</b> o la <b>cuota</b>; algunos te dejan elegir.</p><div class="row">' +
+        '<div><label>Fecha<input type="date" id="la_date" value="' + today() + '"></label></div><div><label>Monto del abono (Q)<input type="number" inputmode="decimal" step="0.01" id="la_amt" placeholder="0.00"></label></div></div>' +
+        '<div class="row" style="margin-top:10px"><div><label>El banco lo aplica para<select id="la_mode"><option value="plazo">Pagar menos meses (reduce el plazo)</option><option value="cuota">Bajar la cuota mensual</option></select></label></div><div><label>Nota (opcional)<input id="la_note" placeholder="Ej. bono de fin de año"></label></div></div>' +
+        '<div class="actions"><button class="btn" data-a="la-save">Registrar abono</button></div></div>';
+    }
+    var pays = r.payments.slice().reverse();
+    h += '<div class="card"><h2>Pagos de la cuota (' + pays.length + ')</h2>' + (pays.length ? '<div class="tbl-wrap"><table class="table"><thead><tr><th>Fecha</th><th class="n">Monto</th><th class="hide-s">Nota</th><th></th></tr></thead><tbody>' +
+      pays.map(function (x) { return '<tr><td>' + fmtDate(x.date) + '</td><td class="n">' + Q(x.amount) + '</td><td class="hide-s muted">' + esc(x.note) + '</td><td class="n"><button class="btn ghost sm" data-a="lp-edit" data-id="' + x.id + '">Editar</button> <button class="btn danger sm" data-a="lp-del" data-id="' + x.id + '" aria-label="Eliminar">' + ic('x') + '</button></td></tr>'; }).join('') +
+      '</tbody></table></div><div class="kv" style="margin-top:8px"><span>Total pagado al banco</span><b>' + Q(r.paidTotal) + '</b></div>' : '<p class="muted">Aún no hay pagos registrados.</p>') + '</div>';
+    if (r.abonos.length) h += '<div class="card"><h2>Abonos a capital (' + r.abonos.length + ')</h2><div class="tbl-wrap"><table class="table"><thead><tr><th>Fecha</th><th class="n">Monto</th><th>Aplicado a</th><th></th></tr></thead><tbody>' +
+      r.abonos.slice().reverse().map(function (x) { return '<tr><td>' + fmtDate(x.date) + '</td><td class="n ab">' + Q(x.amount) + '</td><td>' + (x.mode === 'cuota' ? 'Bajar cuota' : 'Reducir plazo') + '</td><td class="n"><button class="btn danger sm" data-a="la-del" data-id="' + x.id + '" aria-label="Eliminar">' + ic('x') + '</button></td></tr>'; }).join('') +
+      '</tbody></table></div><div class="kv" style="margin-top:8px"><span>Total abonado</span><b class="ab">' + Q(r.abonosTotal) + '</b></div></div>';
+    return h;
+  }
+
+  function tAmort(p, r) {
+    if (!r.ok) return '<div class="card"><p class="muted">Completa los datos del crédito en la pestaña Proyecto.</p></div>';
+    var v = S.amView || 'prox', chips = [['prox', 'Próximas'], ['anio', 'Por año'], ['todas', 'Todas']].map(function (c) { return '<button class="chip' + (v === c[0] ? ' on' : '') + '" data-a="am-view" data-id="' + c[0] + '">' + c[1] + '</button>'; }).join('');
+    var h = '<div class="card"><h2>Tabla de amortización</h2><p class="muted">Cómo se reparte cada cuota entre capital e intereses, y cuánto vas debiendo. Al principio pagas más intereses; con el tiempo, más capital.</p><div class="chips" style="margin:6px 0 12px">' + chips + '</div>';
+    if (v === 'anio') {
+      var ys = {}, order = []; r.rows.forEach(function (x, j) { var y = x.month.slice(0, 4); if (!ys[y]) { ys[y] = { y: y, n: 0, pay: 0, cap: 0, int: 0, bal: 0, done: 0 }; order.push(y); } var o = ys[y]; o.n++; o.pay += x.payment + x.extra; o.cap += x.principal + x.extra; o.int += x.interest; o.bal = x.balance; if (j < r.paidRows) o.done++; });
+      h += '<div class="tbl-wrap"><table class="table"><thead><tr><th>Año</th><th class="n hide-s">Pagos</th><th class="n">Capital</th><th class="n">Intereses</th><th class="n">Saldo final</th></tr></thead><tbody>' +
+        order.map(function (y) { var o = ys[y]; return '<tr><td>' + o.y + (o.done === o.n ? ' <span class="badge b-pagada">listo</span>' : '') + '</td><td class="n hide-s">' + Q(o.pay) + '</td><td class="n">' + Q(o.cap) + '</td><td class="n" style="color:var(--int)">' + Q(o.int) + '</td><td class="n">' + Q(o.bal) + '</td></tr>'; }).join('') + '</tbody></table></div>';
+    } else {
+      var list = v === 'todas' ? r.rows : r.rows.slice(Math.max(0, r.paidRows - 2), r.paidRows + 12);
+      h += '<div class="tbl-wrap"><table class="table"><thead><tr><th>#</th><th>Mes</th><th class="n hide-s">Cuota</th><th class="n hide-s">Capital</th><th class="n hide-s">Interés</th><th class="n">Saldo</th><th>Estado</th></tr></thead><tbody>' +
+        list.map(function (x) { return '<tr><td>' + x.n + '</td><td>' + fmtMonth(x.month) + (x.extra ? ' <span class="tag" style="background:rgba(139,108,240,.16);color:var(--violet)">+ abono</span>' : '') + '</td><td class="n hide-s">' + Q(x.payment) + '</td><td class="n hide-s">' + Q(x.principal) + '</td><td class="n hide-s">' + Q(x.interest) + '</td><td class="n">' + Q(x.balance) + '</td><td><span class="badge b-' + x.status + '">' + x.status + '</span></td></tr>'; }).join('') + '</tbody></table></div>';
+      if (v === 'prox') h += '<p class="muted" style="margin:10px 0 0">Mostrando las próximas cuotas. Usa “Todas” para ver las ' + r.totalRows + '.</p>';
+    }
+    return h + '</div><p class="muted">La tabla es una proyección con tasa fija. Si tu banco ajusta la tasa o cobra cargos, tus cuotas reales pueden variar un poco.</p>';
+  }
+
+  function simOutHtml(p, r) {
+    var s2 = S.sim2 || {}, a = +s2.amt || 0, mo = +s2.mon || 0;
+    if (!a && !mo) return '<p class="muted" style="margin:14px 0 0">Escribe un monto para ver el resultado.</p>';
+    var s = C.loanSimulate(p, { amount: a, mode: s2.mode || 'plazo', monthlyExtra: mo > 0 ? { amount: mo, from: r.next ? r.next.month : C.curMonth() } : null });
+    return '<div class="grid" style="margin:16px 0 0">' +
+      stat('Terminarías en', s.endMonth ? fmtMonth(s.endMonth) : '—', s.monthsSaved > 0 ? spanYM(s.monthsSaved) + ' antes que hoy' : 'sin cambio de plazo', s.monthsSaved > 0 ? 'ok' : '') +
+      stat('Ahorrarías en intereses', mh(s.interestSaved), 'frente a seguir como vas', 'hero') +
+      (a > 0 && (s2.mode === 'cuota') ? stat('Tu cuota bajaría a', mh(s.newPayment + r.fixed), 'antes ' + Q(r.payNow + r.fixed) + ' al mes') : '') +
+      stat('Intereses totales', mh(s.interestTotal), 'antes ' + Q(r.interestTotal)) + '</div>';
+  }
+  function tSim(p, r) {
+    if (!r.ok) return '<div class="card"><p class="muted">Completa los datos del crédito en la pestaña Proyecto.</p></div>';
+    S.sim2 = S.sim2 || { amt: '', mode: 'plazo', mon: '' }; var s2 = S.sim2;
+    return '<div class="card"><h2>¿Y si abono más?</h2><p class="muted">Simula un abono a capital y mira cuánto te ahorras en intereses. Pregunta a tu banco si el abono reduce el plazo o la cuota.</p>' +
+      '<div class="row" style="margin-top:12px"><div><label>Abono único (Q)<input type="number" inputmode="decimal" id="s_amt" value="' + esc(s2.amt) + '" placeholder="0.00"></label></div><div><label>Abono mensual (Q)<input type="number" inputmode="decimal" id="s_mon" value="' + esc(s2.mon) + '" placeholder="0.00"></label></div></div>' +
+      '<div class="chips"><span class="muted">Abono único:</span>' + [10000, 25000, 50000, 100000].map(function (v) { return '<button class="chip" data-a="sim-fill" data-id="' + v + '">' + Q(v).replace('.00', '') + '</button>'; }).join('') + '</div>' +
+      '<label style="margin-top:14px">Tu banco lo aplica para</label><div class="seg2" id="simMode"><button type="button" data-a="sim-mode" data-id="plazo" class="' + (s2.mode !== 'cuota' ? 'on' : '') + '">Pagar menos meses</button><button type="button" data-a="sim-mode" data-id="cuota" class="' + (s2.mode === 'cuota' ? 'on' : '') + '">Bajar la cuota</button></div>' +
+      '<div id="sim_out">' + simOutHtml(p, r) + '</div></div>' +
+      '<div class="card"><h2>El costo real de tu crédito</h2><div class="kv"><span>Préstamo</span><b>' + Q(r.principal) + '</b></div><div class="kv"><span>Intereses totales (plan actual)</span><b style="color:var(--int)">' + Q(r.interestTotal) + '</b></div><div class="kv"><span>Total a pagar al banco</span><b>' + Q(r.totalToPay) + '</b></div><div class="kv"><span>Los intereses son</span><b>' + (r.principal ? (r.interestTotal / r.principal * 100).toFixed(0) : 0) + '% del préstamo</b></div></div>';
+  }
+  function refreshSim() { var p = cur(), o = $('sim_out'); if (p && o && isLoan(p)) o.innerHTML = simOutHtml(p, C.loanCompute(p)); }
+
+  function colorPicker(p, pre) { return '<label style="margin-top:14px">Color del proyecto</label><div class="swatches" id="' + pre + 'sw">' + ACCENTS.map(function (a) { return '<button type="button" class="sw' + (a.k === accentOf(p.color) ? ' on' : '') + '" style="--c1:' + a.c1 + ';--c2:' + a.c2 + '" data-a="color" data-v="' + a.k + '" data-pre="' + pre + '" title="' + a.n + '" aria-label="' + a.n + '"></button>'; }).join('') + '</div>'; }
+  function loanFields(p, pre, setup) {
+    var L = p.loan || {};
+    return '<div class="row">' + field(pre + 'name', 'Proyecto', p.name) + field(pre + 'unit', 'Apartamento', p.unit) + field(pre + 'bank', 'Banco', p.bank) + '</div>' +
+      '<div class="row" style="margin-top:10px">' + field(pre + 'price', 'Valor del apartamento (Q)', p.price || '', 'number') + field(pre + 'principal', 'Monto del préstamo (Q)', L.principal || '', 'number') + '</div>' +
+      '<div class="row" style="margin-top:10px">' + field(pre + 'rate', 'Tasa anual (%)', L.rate, 'number') + field(pre + 'years', 'Plazo (años)', L.years, 'number') + field(pre + 'start', 'Mes de la 1.ª cuota', L.startMonth, 'month') + '</div>' +
+      '<div class="row" style="margin-top:10px">' + field(pre + 'payment', 'Cuota del banco (Q, opcional)', L.payment || '', 'number') + field(pre + 'iusi', 'IUSI mensual (Q)', p.iusi, 'number') + field(pre + 'seguro', 'Seguro mensual (Q)', p.seguro, 'number') + field(pre + 'mant', 'Mantenimiento (Q)', p.mantenimiento, 'number') + '</div>' +
+      '<p class="muted" style="margin:8px 0 0">Si dejas la cuota vacía, la app la calcula con el monto, la tasa y el plazo. Si tu banco te dio una cuota exacta, escríbela. El IUSI y el seguro se suman solo si el banco te los cobra junto con la cuota.</p>' +
+      (setup ? '<div class="row" style="margin-top:14px">' + field(pre + 'paid', 'Cuotas que ya pagaste', setup.paid, 'number') + '</div><p class="muted" style="margin:8px 0 0">La app las registra por ti, con el monto de cada cuota. Podrás editarlas o borrarlas después.</p>' : '') + colorPicker(p, pre);
+  }
+  function readLoanForm(pre, base) {
+    var L = Object.assign({}, base.loan || {}, { principal: numv(pre + 'principal'), rate: numv(pre + 'rate'), years: numv(pre + 'years'), startMonth: val(pre + 'start') || C.curMonth(), payment: numv(pre + 'payment') });
+    return Object.assign({}, base, { name: val(pre + 'name').trim(), unit: val(pre + 'unit').trim(), bank: val(pre + 'bank').trim(), price: numv(pre + 'price'), iusi: numv(pre + 'iusi'), seguro: numv(pre + 'seguro'), mantenimiento: numv(pre + 'mant'), loan: L, rate: L.rate, years: L.years });
+  }
+  function paidPayments(p, n) {
+    var s = C.loanSchedule(p.loan), fx = (+p.iusi || 0) + (+p.seguro || 0), out = [];
+    for (var k = 0; k < Math.min(n, s.rows.length); k++) out.push({ id: uid(), date: s.rows[k].month + '-15', amount: C.r2(s.rows[k].payment + fx), note: '' });
+    return out;
+  }
+  function openChooser() {
+    closeSheet(); var d = document.createElement('div'); d.className = 'sheet-back'; d.id = 'sheet';
+    d.innerHTML = '<div class="sheet" role="dialog" aria-label="Nuevo proyecto"><h2>Nuevo proyecto</h2><p class="muted" style="margin:-4px 0 14px">¿En qué etapa estás?</p>' +
+      '<button class="opt" data-a="new-pdf"><span class="oi">' + ic('upload') + '</span><span><b>Estoy pagando el enganche</b><small>Sube la cotización en PDF y la app arma tu plan.</small></span></button>' +
+      '<button class="opt" data-a="new-loan"><span class="oi">' + ic('home') + '</span><span><b>Ya pago el crédito del banco</b><small>Registra tu préstamo y sigue tu saldo, intereses y abonos.</small></span></button>' +
+      '<button class="opt" data-a="new-manual"><span class="oi">' + ic('file') + '</span><span><b>Llenar el enganche a mano</b><small>Sin PDF: escribes los datos tú.</small></span></button>' +
+      '<div class="actions" style="justify-content:flex-end"><button class="btn ghost sm" data-a="sheet-x">Cancelar</button></div></div>';
+    d.addEventListener('click', function (e) { if (e.target === d) closeSheet(); });
+    Array.prototype.forEach.call(d.querySelectorAll('[data-a]'), function (b) { b.onclick = function (ev) { ev.preventDefault(); act(b.dataset.a, b.dataset.id, b); }; });
+    document.body.appendChild(d);
+  }
+  function closeSheet() { var d = $('sheet'); if (d) d.remove(); }
+  function bindLoanDraft() {
+    var st = $('d_start'), pc = $('d_paid'); if (!st || !pc) return; pc.dataset.auto = (S.importDraft && S.importDraft.converting) ? '0' : '1';
+    pc.oninput = function () { pc.dataset.auto = '0'; };
+    st.oninput = st.onchange = function () { if (pc.dataset.auto === '1') pc.value = monthsBetween(st.value, C.curMonth()); };
+  }
+
   /* ---------- eventos ---------- */
   document.addEventListener('click', function (e) { if (S.menu && !(e.target.closest && (e.target.closest('#menu') || e.target.closest('[data-a="menu"]')))) { S.menu = false; var m = $('menu'); if (m) m.remove(); } });
   function bind() {
     var sim = $('sim'); if (sim) sim.oninput = function () { S.sim = numv('sim'); var pos = sim.selectionStart; render(); var n = $('sim'); n.focus(); try { n.setSelectionRange(pos, pos); } catch (e) { } };
     Array.prototype.forEach.call($app.querySelectorAll('[data-tab]'), function (b) { b.onclick = function () { S.tab = b.dataset.tab; S.editing = null; S.anim = true; render(); window.scrollTo(0, 0); }; });
     Array.prototype.forEach.call($app.querySelectorAll('[data-a]'), function (b) { b.onclick = function (ev) { ev.preventDefault(); ev.stopPropagation(); act(b.dataset.a, b.dataset.id, b); }; });
+    var sA = $('s_amt'), sM = $('s_mon');
+    if (sA) sA.oninput = function () { S.sim2 = S.sim2 || {}; S.sim2.amt = sA.value; refreshSim(); };
+    if (sM) sM.oninput = function () { S.sim2 = S.sim2 || {}; S.sim2.mon = sM.value; refreshSim(); };
     var drop = $('drop');
     if (drop) {
       ['dragenter', 'dragover'].forEach(function (n) { drop.addEventListener(n, function (e) { e.preventDefault(); drop.classList.add('over'); }); });
@@ -743,7 +970,39 @@
   function act(a, id, el) {
     var p = cur();
     switch (a) {
-      case 'new': startImport(false); break;
+      case 'new': openChooser(); break;
+      case 'sheet-x': closeSheet(); break;
+      case 'new-pdf': closeSheet(); startImport(false); break;
+      case 'new-manual': closeSheet(); openDraft(newProject(), false); break;
+      case 'new-loan': closeSheet(); S.importDraft = { kind: 'loan', isNew: true, logos: [], notes: [], project: newProject({ phase: 'credito', loan: { principal: 0, rate: 7.5, years: 25, startMonth: C.curMonth(), payment: '', abonos: [], payments: [] } }) }; showDraft(false); window.scrollTo(0, 0); break;
+      case 'to-loan': {
+        var rr = C.compute(p);
+        S.importDraft = { kind: 'loan', converting: true, isNew: false, logos: [], notes: ['Tomamos los datos de tu etapa de enganche. Revísalos y ajusta lo que tu banco te haya confirmado.'],
+          project: Object.assign({}, p, { phase: 'credito', loan: { principal: rr.financedNow, rate: p.rate || 7.5, years: p.years || 25, startMonth: C.addMonths(C.curMonth(), 1), payment: '', abonos: [], payments: [] } }) };
+        showDraft(false); window.scrollTo(0, 0); break; }
+      case 'to-enganche': if (confirm('¿Volver este proyecto a la etapa de enganche? Tus datos del crédito se conservan.')) { p.phase = 'enganche'; S.tab = 'resumen'; persist(p).then(function () { S.anim = true; render(); }); } break;
+      case 'edit-loan': S.tab = 'proyecto'; S.anim = true; render(); break;
+      case 'goto-tab': S.tab = id; S.anim = true; render(); window.scrollTo(0, 0); break;
+      case 'am-view': S.amView = id; render(); break;
+      case 'fill-lp': $('lp_amt').value = id; break;
+      case 'lp-save': {
+        var la = numv('lp_amt'); if (!la) return toast('Escribe el monto que pagaste');
+        p.loan = p.loan || {}; p.loan.payments = p.loan.payments || []; var lrec = { id: S.editing || uid(), date: val('lp_date') || today(), amount: la, note: val('lp_note').trim() };
+        if (S.editing) p.loan.payments = p.loan.payments.map(function (x) { return x.id === S.editing ? lrec : x; }); else p.loan.payments.push(lrec);
+        S.editing = null; persist(p).then(function () { toast('Pago guardado'); render(); }); break; }
+      case 'lp-edit': S.editing = id; render(); window.scrollTo(0, 0); break;
+      case 'lp-del': if (confirm('¿Eliminar este pago?')) { p.loan.payments = p.loan.payments.filter(function (x) { return x.id !== id; }); persist(p).then(render); } break;
+      case 'lb-save': {
+        var bn = Math.round(numv('lb_n')), ba2 = numv('lb_amt'), bs = val('lb_start'); if (!bs || bn < 1 || !ba2) return toast('Revisa mes, cantidad y monto'); if (bn > 360) return toast('Máximo 360 meses');
+        p.loan.payments = p.loan.payments || []; for (var q = 0; q < bn; q++) p.loan.payments.push({ id: uid(), date: C.addMonths(bs, q) + '-15', amount: ba2, note: '' });
+        persist(p).then(function () { toast(bn + ' pagos agregados'); render(); }); break; }
+      case 'la-save': {
+        var aa = numv('la_amt'); if (!aa) return toast('Escribe el monto del abono');
+        p.loan.abonos = p.loan.abonos || []; p.loan.abonos.push({ id: uid(), date: val('la_date') || today(), amount: aa, mode: val('la_mode') === 'cuota' ? 'cuota' : 'plazo', note: val('la_note').trim() });
+        persist(p).then(function () { toast('Abono registrado'); render(); }); break; }
+      case 'la-del': if (confirm('¿Eliminar este abono?')) { p.loan.abonos = p.loan.abonos.filter(function (x) { return x.id !== id; }); persist(p).then(render); } break;
+      case 'sim-fill': S.sim2 = S.sim2 || {}; S.sim2.amt = id; if ($('s_amt')) $('s_amt').value = id; refreshSim(); break;
+      case 'sim-mode': S.sim2 = S.sim2 || {}; S.sim2.mode = id; Array.prototype.forEach.call($('simMode').children, function (b) { b.classList.toggle('on', b.dataset.id === id); }); refreshSim(); break;
       case 'home': S.importDraft = null; S.menu = false; go('home'); break;
       case 'menu': S.menu = !S.menu; render(); break;
       case 'open': go('project', id, 'resumen'); break;
@@ -793,7 +1052,7 @@
       case 'view': openViewer(id); break;
       case 'del-file':
         if (confirm('¿Eliminar este archivo?')) { Files.del(id).catch(function () { }).then(function () { p.files = p.files.filter(function (x) { return x.id !== id; }); delete S.thumbs[id]; return persist(p); }).then(render); } break;
-      case 'save-proj': S.projects = S.projects.map(function (x) { return x.id === p.id ? readForm('p_', p) : x; }); persist(cur()).then(function () { toast('Proyecto guardado'); render(); }); break;
+      case 'save-proj': S.projects = S.projects.map(function (x) { return x.id === p.id ? (isLoan(p) ? readLoanForm('p_', p) : readForm('p_', p)) : x; }); persist(cur()).then(function () { toast('Proyecto guardado'); render(); }); break;
       case 'import-update': startImport(true); break;
       case 'del-proj':
         if (confirm('¿Eliminar "' + label(p) + '" y todos sus pagos y planos? No se puede deshacer.')) {
@@ -802,11 +1061,16 @@
       case 'draft-pdf': startImport(false); break;
       case 'draft-cancel': S.importDraft = null; S.anim = true; render(); break;
       case 'draft-save':
-        var d = S.importDraft, np = readForm('d_', d.project);
+        var d = S.importDraft, np = d.kind === 'loan' ? readLoanForm('d_', d.project) : readForm('d_', d.project);
         if (!np.name && !np.unit) return toast('Ponle nombre al proyecto');
+        if (d.kind === 'loan') {
+          if (!(np.loan.principal > 0) || !(np.loan.years > 0)) return toast('Escribe el monto del préstamo y el plazo en años');
+          np.phase = 'credito'; np.loan.payments = np.loan.payments || [];
+          var npaid = Math.round(numv('d_paid')); if (npaid > 0) np.loan.payments = np.loan.payments.concat(paidPayments(np, npaid));
+        }
         S.importDraft = null;
         if (d.isNew) S.projects.push(np); else S.projects = S.projects.map(function (x) { return x.id === np.id ? np : x; });
-        S.id = np.id; S.view = 'project'; S.tab = d.isNew ? 'pagos' : S.tab; S.anim = true;
+        S.id = np.id; S.view = 'project'; S.tab = d.kind === 'loan' ? 'resumen' : (d.isNew ? 'pagos' : S.tab); S.anim = true;
         persist(np).then(function () { toast('Proyecto guardado'); go('project', np.id); }); break;
       case 'export':
         var blob = new Blob([JSON.stringify(S.projects, null, 2)], { type: 'application/json' }), a2 = document.createElement('a');

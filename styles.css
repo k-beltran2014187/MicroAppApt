@@ -332,3 +332,49 @@ html[data-theme=light] .lp-hero h1 em{background:linear-gradient(95deg,var(--ink
 @media(max-width:620px){.lp-cta .btn{flex:1 1 100%}.lp-trust{flex-direction:column;align-items:flex-start}.calc{padding:20px}.calc-out{gap:10px}.co b{font-size:1.4rem}}
 @media(max-width:480px){.lp-nav .wm{display:none}.lp-nav .btn.sm{padding:6px 12px}}
 @media(prefers-reduced-motion:reduce){.rv{opacity:1!important;transform:none!important}}
+
+/* ---------- etapa de crédito: gráficas ---------- */
+html[data-theme=light]{--cap:#2a78d6;--int:#eb6834}
+html[data-theme=dark]{--cap:#3987e5;--int:#d95926}
+.lnk{color:var(--acc);text-decoration:underline;text-underline-offset:3px}
+.chart{position:relative;outline:none;border-radius:12px;touch-action:pan-y}
+.chart:focus-visible{box-shadow:0 0 0 3px rgba(var(--a-rgb),.35)}
+.chart svg{display:block;overflow:visible}
+.chart .gl{stroke:var(--line);stroke-width:1}
+.chart .ax{fill:var(--mut);font:500 11px var(--sans)}
+.chart .ar{fill:var(--cap);opacity:.10}
+.chart .ln{fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.chart .lm{stroke:var(--cap)}.chart .lb{stroke:var(--mut)}
+.chart .dot,.chart .d1{fill:var(--cap);stroke:var(--card-solid);stroke-width:2}
+.chart .d2{fill:var(--mut);stroke:var(--card-solid);stroke-width:2}
+.chart .tl{fill:var(--ink);font:600 12px var(--sans)}
+.chart .xh{stroke:var(--line2);stroke-width:1}
+.chart .hit{fill:transparent;cursor:crosshair}
+.ctip{position:absolute;top:6px;left:0;pointer-events:none;background:var(--card-solid);border:1px solid var(--line2);border-radius:12px;padding:9px 12px;box-shadow:0 14px 30px -14px #000;opacity:0;transition:opacity .12s;min-width:150px;z-index:3}
+.ctip.on{opacity:1}
+.ctip .tm{color:var(--mut);font-size:.72rem;margin-bottom:5px}
+.ctip .tr{display:flex;gap:8px;align-items:center;font-size:.85rem}.ctip .tr span{color:var(--mut);flex:1}.ctip .tr b{font-weight:650;font-variant-numeric:tabular-nums}
+.lk{display:inline-block;width:14px;height:3px;border-radius:2px;margin-right:8px;vertical-align:middle;flex:none}
+.legend{display:flex;gap:6px 22px;flex-wrap:wrap;margin-top:12px;color:var(--mut);font-size:.84rem}
+.legend span{display:inline-flex;align-items:center}.legend b{color:var(--ink);font-weight:600;margin-right:6px}
+.legend.big{font-size:.92rem;margin-top:14px}
+.stackbar{display:flex;gap:2px;height:24px;margin-top:6px}
+.sb{display:block;min-width:4px;height:100%}
+.sb.cap{background:var(--cap);border-radius:4px 0 0 4px}.sb.int{background:var(--int);border-radius:0 4px 4px 0}
+.sb:hover{filter:brightness(1.12)}
+#gtip{position:fixed;transform:translate(-50%,-100%);background:var(--card-solid);color:var(--ink);border:1px solid var(--line2);border-radius:10px;padding:7px 11px;font-size:.8rem;font-weight:550;box-shadow:0 14px 30px -14px #000;pointer-events:none;opacity:0;transition:opacity .12s;z-index:60;white-space:nowrap}
+#gtip.on{opacity:1}
+.chip.on{background:rgba(var(--a-rgb),.16);border-color:rgba(var(--a-rgb),.6);color:var(--acc);font-weight:600}
+
+/* ---------- menú "Nuevo proyecto" ---------- */
+.sheet-back{position:fixed;inset:0;z-index:45;background:rgba(5,8,12,.6);display:grid;place-items:center;padding:18px;animation:fade .2s}
+.sheet{width:min(460px,100%);background:var(--card-solid);border:1px solid var(--line2);border-radius:22px;padding:22px;box-shadow:0 40px 80px -30px #000;animation:rise .35s var(--ease)}
+.sheet h2{font-family:var(--serif);font-size:1.8rem;margin-bottom:6px}
+.opt{all:unset;box-sizing:border-box;display:flex;gap:14px;align-items:center;width:100%;padding:14px;margin-bottom:10px;border:1px solid var(--line2);border-radius:16px;background:var(--card2);cursor:pointer;transition:transform .2s var(--ease),border-color .2s}
+.opt:hover{border-color:rgba(var(--a-rgb),.7);transform:translateY(-2px)}.opt:focus-visible{outline:2px solid var(--a1b);outline-offset:2px}
+.opt .oi{width:44px;height:44px;border-radius:13px;display:grid;place-items:center;background:rgba(var(--a-rgb),.14);color:var(--acc);flex:none}.opt .oi svg{width:22px;height:22px}
+.opt b{display:block;font-weight:600;color:var(--ink)}.opt small{display:block;color:var(--mut);font-size:.82rem;margin-top:2px;line-height:1.35}
+@media(max-width:620px){.sheet-back{place-items:end center;padding:0}.sheet{border-radius:22px 22px 0 0;padding-bottom:max(22px,env(safe-area-inset-bottom))}}
+
+.tag{white-space:nowrap}
+@media(max-width:620px){.table .badge{letter-spacing:.02em}}
