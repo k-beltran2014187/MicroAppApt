@@ -260,3 +260,4 @@ details summary{cursor:pointer;font-weight:600;color:var(--acc)}
 .pcard.add::before,.pcard.add::after{display:none}
 .pa-i{width:52px;height:52px;border-radius:50%;display:grid;place-items:center;background:rgba(var(--a-rgb),.15);color:var(--acc);margin-bottom:6px}.pa-i svg{width:24px;height:24px}
 @media(max-width:620px){.hero-logo{display:none}.pbrand .wm b{font-size:1.2rem}.pgrid{grid-template-columns:1fr}.logo-row{gap:14px}.lgo{width:92px;height:72px}}
+.auth .heroorb{margin-bottom:10px}

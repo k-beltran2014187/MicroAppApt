@@ -239,7 +239,7 @@
   }
   function tabsHtml() { return '<nav class="tabs"><div class="tabs-in">' + TABS.map(function (t) { return '<button data-tab="' + t[0] + '" class="' + (S.tab === t[0] ? 'on' : '') + '">' + t[1] + '</button>'; }).join('') + '<i class="ind"></i></div></nav>'; }
   function welcomeHtml() {
-    return '<div class="welcome"><div class="heroorb" id="heroOrb"></div><div class="eyebrow">Control de enganche</div><h1>Tu apartamento, siempre bajo control.</h1>' +
+    return migBanner() + '<div class="welcome"><div class="heroorb" id="heroOrb"></div><div class="eyebrow">Control de enganche</div><h1>Tu apartamento, siempre bajo control.</h1>' +
       '<p class="lead">Sube tu cotización y sigue cada cuota, abono y parqueo, con tus planos siempre a la mano.</p>' +
       '<button class="btn" data-a="new">' + ic('upload') + 'Subir cotización (PDF)</button>' +
       '<div class="feats"><div class="feat"><div class="fi">' + ic('scan') + '</div><b>Lee tu cotización</b><span>Toma precio, enganche, cuotas y plazo del PDF en segundos.</span></div>' +
@@ -251,7 +251,7 @@
   function homeHtml() {
     var rs = S.projects.map(function (p) { return { p: p, r: C.compute(p) }; });
     var paid = rs.reduce(function (t, x) { return t + x.r.paidEng; }, 0), rem = rs.reduce(function (t, x) { return t + x.r.remEng; }, 0), ab = rs.reduce(function (t, x) { return t + x.r.abonos; }, 0);
-    var h = '<div class="home-head"><div class="eyebrow">Mi portafolio</div><h1 class="hero-title">Mis proyectos</h1><p class="muted">' + rs.length + (rs.length === 1 ? ' apartamento en proceso' : ' apartamentos en proceso') + '</p></div>';
+    var h = migBanner() + '<div class="home-head"><div class="eyebrow">Mi portafolio</div><h1 class="hero-title">Mis proyectos</h1><p class="muted">' + rs.length + (rs.length === 1 ? ' apartamento en proceso' : ' apartamentos en proceso') + '</p></div>';
     if (rs.length > 1) h += '<div class="grid">' + stat('Pagado', cq(paid), 'en enganches, en total', 'hero') + stat('Falta', cq(rem), 'de enganche, en total') + stat('Abonado', cq(ab), 'a capital', 'abono') + '</div>';
     h += '<div class="pgrid">' + rs.map(function (x) {
       var p = x.p, r = x.r, nx = r.next;
@@ -624,21 +624,46 @@
   }
 
   /* ---------- autenticación (modo nube) ---------- */
-  function renderAuth(msg) {
-    applyTheme('gold');
-    $app.innerHTML = '<div class="ambient" aria-hidden="true"><i></i><i></i><i></i></div><div class="wrap"><div class="card auth"><div class="heroorb" id="heroOrb"></div><h2 style="text-align:center">Mi Enganche</h2><p class="muted" style="text-align:center">Entra para ver tus proyectos desde cualquier dispositivo.</p>' +
-      '<label>Correo<input id="a_mail" type="email" autocomplete="email"></label><label style="margin-top:10px">Contraseña (mín. 6)<input id="a_pass" type="password" autocomplete="current-password"></label>' +
-      (msg ? '<p class="note" style="margin-top:12px">' + esc(msg) + '</p>' : '') +
-      '<div class="actions"><button class="btn" data-a="login">Entrar</button><button class="btn sec" data-a="signup">Crear cuenta</button></div></div></div>';
+  var AUTH_ERR = [[/invalid login credentials/i, 'Correo o contraseña incorrectos.'], [/already registered|already been registered/i, 'Ya existe una cuenta con ese correo. Prueba entrar.'],
+    [/at least 6|weak password|password should/i, 'La contraseña debe tener mínimo 6 caracteres.'], [/email not confirmed/i, 'Primero confirma tu correo: revisa tu bandeja de entrada (y spam).'],
+    [/rate limit|too many/i, 'Demasiados intentos. Espera unos minutos y vuelve a probar.'], [/invalid email|unable to validate email/i, 'Ese correo no parece válido.'], [/same password/i, 'Elige una contraseña distinta a la anterior.']];
+  var trErr = function (m) { for (var i = 0; i < AUTH_ERR.length; i++) if (AUTH_ERR[i][0].test(m || '')) return AUTH_ERR[i][1]; return m || 'Ocurrió un error. Intenta de nuevo.'; };
+  // modos: login | signup | forgot | recover
+  function renderAuth(msg, ok) {
+    applyTheme('gold'); var mode = S.authMode || 'login', tab = mode === 'login' || mode === 'signup';
+    var title = { login: 'Bienvenido de vuelta', signup: 'Crea tu cuenta', forgot: 'Recupera tu contraseña', recover: 'Nueva contraseña' }[mode];
+    var sub = { login: 'Entra para ver tus proyectos desde cualquier dispositivo.', signup: 'Guarda tus proyectos, pagos y planos de forma segura y accede desde tu teléfono o computadora.', forgot: 'Te enviaremos un enlace a tu correo para elegir una nueva contraseña.', recover: 'Escribe tu nueva contraseña.' }[mode];
+    $app.innerHTML = '<div class="ambient" aria-hidden="true"></div><div class="wrap"><form class="card auth" id="authForm" novalidate><div class="heroorb" id="heroOrb"></div><div class="eyebrow" style="text-align:center">Mi Enganche</div>' +
+      '<h2 style="text-align:center;margin:6px 0 6px">' + title + '</h2><p class="muted" style="text-align:center;margin-bottom:18px">' + sub + '</p>' +
+      (tab ? '<div class="seg2" style="display:flex;margin:0 0 16px"><button type="button" style="flex:1;justify-content:center" class="' + (mode === 'login' ? 'on' : '') + '" data-a="auth-mode" data-id="login">Entrar</button><button type="button" style="flex:1;justify-content:center" class="' + (mode === 'signup' ? 'on' : '') + '" data-a="auth-mode" data-id="signup">Crear cuenta</button></div>' : '') +
+      (mode !== 'recover' ? '<label>Correo<input id="a_mail" type="email" autocomplete="email" inputmode="email" value="' + esc(S.authMail || '') + '"></label>' : '') +
+      (mode !== 'forgot' ? '<label style="margin-top:12px">' + (mode === 'recover' ? 'Nueva contraseña' : 'Contraseña') + ' <span style="text-transform:none;letter-spacing:0;font-weight:450">(mínimo 6 caracteres)</span><input id="a_pass" type="password" autocomplete="' + (mode === 'login' ? 'current-password' : 'new-password') + '"></label>' : '') +
+      (msg ? '<p class="note" style="margin:14px 0 0;' + (ok ? 'background:rgba(76,197,143,.12);border-color:rgba(76,197,143,.4)' : '') + '">' + esc(msg) + '</p>' : '') +
+      '<div class="actions"><button class="btn" type="submit" style="flex:1">' + { login: 'Entrar', signup: 'Crear mi cuenta', forgot: 'Enviar enlace', recover: 'Guardar contraseña' }[mode] + '</button></div>' +
+      (mode === 'login' ? '<p style="text-align:center;margin:14px 0 0"><button type="button" class="chip" data-a="auth-mode" data-id="forgot">¿Olvidaste tu contraseña?</button></p>' : '') +
+      (mode === 'forgot' ? '<p style="text-align:center;margin:14px 0 0"><button type="button" class="chip" data-a="auth-mode" data-id="login">Volver a entrar</button></p>' : '') +
+      '<p class="muted" style="text-align:center;margin:18px 0 0;font-size:.78rem">Tus datos son tuyos. Lee nuestro <a href="privacidad.html" target="_blank" rel="noopener" style="color:var(--acc)">aviso de privacidad</a>.</p></form></div>';
     bind(); post();
+    var f = $('authForm'); if (f) f.onsubmit = function (e) { e.preventDefault(); authSubmit(); };
   }
-  function authDo(kind) {
-    var email = val('a_mail').trim(), password = val('a_pass');
-    (kind === 'login' ? sb.auth.signInWithPassword({ email: email, password: password }) : sb.auth.signUp({ email: email, password: password })).then(function (r) {
-      if (r.error) return renderAuth(r.error.message);
-      if (!r.data.session) return renderAuth('Revisa tu correo para confirmar la cuenta y luego entra.');
+  function authSubmit() {
+    var mode = S.authMode || 'login', email = val('a_mail').trim(), password = val('a_pass'); S.authMail = email;
+    if (mode !== 'recover' && !/^\S+@\S+\.\S+$/.test(email)) return renderAuth('Escribe un correo válido.');
+    if (mode !== 'forgot' && password.length < 6) return renderAuth('La contraseña debe tener mínimo 6 caracteres.');
+    busy(mode === 'login' ? 'Entrando…' : 'Un momento…');
+    var back = location.origin + location.pathname;
+    var call = mode === 'login' ? sb.auth.signInWithPassword({ email: email, password: password })
+      : mode === 'signup' ? sb.auth.signUp({ email: email, password: password, options: { emailRedirectTo: back } })
+      : mode === 'forgot' ? sb.auth.resetPasswordForEmail(email, { redirectTo: back })
+      : sb.auth.updateUser({ password: password });
+    call.then(function (r) {
+      unbusy();
+      if (r.error) return renderAuth(trErr(r.error.message));
+      if (mode === 'forgot') return renderAuth('Listo. Si ese correo tiene cuenta, te llegará un enlace para elegir una nueva contraseña.', true);
+      if (mode === 'recover') { S.recovery = false; S.authMode = 'login'; S.user = r.data.user; S.needAuth = false; toast('Contraseña actualizada'); return boot(); }
+      if (!r.data.session) { S.authMode = 'login'; return renderAuth('Te enviamos un correo para confirmar tu cuenta. Ábrelo y luego entra aquí.', true); }
       S.user = r.data.session.user; S.needAuth = false; boot();
-    });
+    }).catch(function (e) { unbusy(); renderAuth(trErr(e && e.message)); });
   }
 
   /* ---------- eventos ---------- */
@@ -671,7 +696,9 @@
         if (pre === 'd_') { S.importDraft.project.color = el.dataset.v; } else { p.color = el.dataset.v; persist(p); }
         applyTheme(el.dataset.v); break;
       case 'logout': sb.auth.signOut().then(function () { S.user = null; S.projects = []; S.id = null; S.view = 'home'; S.needAuth = true; render(); }); break;
-      case 'login': case 'signup': authDo(a); break;
+      case 'auth-mode': S.authMode = id; S.authMail = val('a_mail') || S.authMail; renderAuth(); break;
+      case 'migrate': migrateLocal(); break;
+      case 'migrate-skip': try { localStorage.setItem('enganche.migrated.' + S.user.id, '1'); } catch (e) { } S.localList = []; render(); break;
       case 'fill-cuota': $('f_eng').value = p.cuotaEnganche; break;
       case 'fill-reserva': $('f_eng').value = p.reserva; break;
       case 'save-pay':
@@ -735,10 +762,30 @@
   }
 
   /* ---------- arranque ---------- */
+  // Proyectos guardados en este navegador (modo local) que aún no están en la cuenta
+  function localPending() {
+    if (store.mode !== 'cloud' || !S.user) return [];
+    try { if (localStorage.getItem('enganche.migrated.' + S.user.id)) return []; var l = JSON.parse(localStorage.getItem(LS) || '[]'), have = S.projects.map(function (p) { return p.id; }); return l.filter(function (p) { return p && p.id && have.indexOf(p.id) < 0; }); } catch (e) { return []; }
+  }
+  function migBanner() {
+    var n = (S.localList || []).length; if (!n) return '';
+    return '<div class="card next"><div class="ic">' + ic('upload') + '</div><div class="tx"><b>Encontramos ' + n + (n === 1 ? ' proyecto' : ' proyectos') + ' en este dispositivo</b><span>¿Quieres subirlos a tu cuenta, con sus planos?</span></div><div class="actions" style="margin:0"><button class="btn sm" data-a="migrate">Subir a mi cuenta</button><button class="btn ghost sm" data-a="migrate-skip">Ahora no</button></div></div>';
+  }
+  function migrateLocal() {
+    var todo = S.localList || []; if (!todo.length) return; busy('Subiendo tus proyectos…');
+    todo.reduce(function (pr, p) {
+      return pr.then(function () {
+        return (p.files || []).reduce(function (q, f) { return q.then(function () { return idbDo('readonly', function (s) { return s.get(f.id); }).then(function (b) { if (b) return Files.put(f.id, b); }).catch(function () { }); }); }, Promise.resolve())
+          .then(function () { return store.save(p); }).then(function () { S.projects.push(p); });
+      });
+    }, Promise.resolve()).then(function () {
+      try { localStorage.setItem('enganche.migrated.' + S.user.id, '1'); } catch (e) { } S.localList = []; unbusy(); toast(todo.length + ' proyecto(s) subidos a tu cuenta'); go('home');
+    }).catch(function (e) { unbusy(); toast('No se pudo subir: ' + (e.message || e)); });
+  }
   function boot() {
     var slow = store.mode === 'cloud'; if (slow) busy('Cargando tus proyectos…');
     store.load().then(function (list) {
-      if (slow) unbusy(); S.projects = list; S.id = (list.filter(function (p) { return p.id === S.id; })[0] || list[0] || {}).id || null; S.view = 'home'; S.anim = true; render();
+      if (slow) unbusy(); S.projects = list; S.id = (list.filter(function (p) { return p.id === S.id; })[0] || list[0] || {}).id || null; S.view = 'home'; S.anim = true; S.localList = localPending(); render();
     }).catch(function (e) { if (slow) unbusy(); toast('No se pudieron cargar los datos: ' + (e.message || e)); render(); });
   }
   function init() {
@@ -749,9 +796,13 @@
     if (CFG.supabaseUrl && CFG.supabaseAnonKey) {
       busy('Conectando…');
       loadScript('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js').then(function () {
-        sb = window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseAnonKey); store = Remote; return sb.auth.getSession();
+        sb = window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseAnonKey); store = Remote;
+        sb.auth.onAuthStateChange(function (evt) { if (evt === 'PASSWORD_RECOVERY') { S.recovery = true; if (S.ready) { S.needAuth = true; S.authMode = 'recover'; render(); } } });
+        return sb.auth.getSession();
       }).then(function (r) {
-        unbusy(); if (r.data.session) { S.user = r.data.session.user; boot(); } else { S.needAuth = true; render(); }
+        unbusy(); S.ready = true;
+        if (S.recovery && r.data.session) { S.needAuth = true; S.authMode = 'recover'; render(); }
+        else if (r.data.session) { S.user = r.data.session.user; boot(); } else { S.needAuth = true; render(); }
       }).catch(function (e) { unbusy(); store = store || Local; $app.innerHTML = '<div class="wrap"><p class="note">No se pudo conectar con la nube: ' + esc(e.message) + '</p></div>'; });
     } else { store = Local; boot(); }
   }
