@@ -378,3 +378,5 @@ html[data-theme=dark]{--cap:#3987e5;--int:#d95926}
 
 .tag{white-space:nowrap}
 @media(max-width:620px){.table .badge{letter-spacing:.02em}}
+
+.stat small{white-space:normal}

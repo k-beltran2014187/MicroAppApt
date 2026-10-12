@@ -366,8 +366,23 @@
       r.schedule.map(function (s) { return '<tr><td>' + esc(s.label) + '</td><td class="hide-s">' + fmtMonth(s.month) + '</td><td class="n">' + Q(s.amount) + '</td><td class="n">' + Q(s.paid) + '</td><td><span class="badge b-' + s.status + '">' + s.status + '</span></td></tr>'; }).join('') + '</tbody></table></div></div>';
   }
 
+  function simEngHtml(p, r) {
+    var x = +S.sim || 0, rate = +p.rate || 0, yrs_ = +p.years || 0;
+    if (!(x > 0)) return '<p class="muted" style="margin:14px 0 0">Escribe un monto para ver cuánto bajaría tu cuota o cuánto tiempo te ahorrarías.</p>';
+    if (!(r.financedNow > 0) || !(yrs_ > 0)) return '<p class="muted" style="margin:14px 0 0">Completa el precio, la tasa y el plazo en la pestaña Proyecto para simular.</p>';
+    var P2 = Math.max(0, r.financedNow - x), S0 = '2000-01', fx = r.fixed;
+    var base = C.loanSchedule({ principal: r.financedNow, rate: rate, years: yrs_, startMonth: S0 });
+    var optC = C.loanSchedule({ principal: P2, rate: rate, years: yrs_, startMonth: S0 });                          // mismo plazo, cuota menor
+    var optP = C.loanSchedule({ principal: P2, rate: rate, years: yrs_, startMonth: S0, payment: base.pay0 });      // misma cuota, menos meses
+    var dq = r.totalNow - (optC.pay0 + fx), saveC = Math.max(0, base.totalInterest - optC.totalInterest), saveP = Math.max(0, base.totalInterest - optP.totalInterest), mP = Math.max(0, base.months - optP.months);
+    return '<div class="grid" style="margin:16px 0 0">' +
+      stat('Si mantienes el plazo', mh(optC.pay0 + fx), 'tu cuota total bajaría ' + Q(Math.max(0, dq)) + ' al mes (hoy ' + Q(r.totalNow) + ')', 'hero') +
+      stat('Ahorro en intereses', mh(saveC), 'con ese plazo de ' + spanYM(base.months)) +
+      stat('Si sigues pagando la misma cuota', mP > 0 ? spanYM(mP) + ' menos' : 'sin cambio', 'terminarías en ' + spanYM(optP.months) + ' en vez de ' + spanYM(base.months), 'ok') +
+      stat('Ahorro en intereses', mh(saveP), 'pagando la misma cuota de hoy') + '</div>' +
+      '<p class="muted" style="margin:12px 0 0">Pregunta a tu banco si el abono reduce el plazo o la cuota; así sabes cuál de las dos opciones te aplica.</p>';
+  }
   function tPrestamo(p, r) {
-    var extra = S.sim, fn = C.pmt(Math.max(0, r.financedNow - extra), p.rate, p.years) + r.fixed;
     var h = '<div class="card"><h2>Cuota proyectada del préstamo</h2>' +
       '<div class="kv"><span>Precio de la propiedad</span><b>' + Q(p.price) + '</b></div><div class="kv"><span>Enganche total</span><b>' + Q(r.engTotal) + '</b></div>' +
       '<div class="kv"><span>Monto a financiar (cotización)</span><b>' + Q(r.financedOrig) + '</b></div><div class="kv"><span>Abonos a capital</span><b class="ab">− ' + Q(r.abonos) + '</b></div>' +
@@ -376,8 +391,10 @@
     h += '<div class="grid">' + stat('Cuota nivelada', cq(r.pmtNow), r.abonos ? 'antes ' + Q(r.pmtOrig) : 'capital + interés') + stat('IUSI + seguro', Q(r.fixed), 'mensual') +
       stat('Cuota mensual total', cq(r.totalNow), r.abonos ? 'ahorras ' + Q(r.totalOrig - r.totalNow) + ' al mes' : '', 'hero') +
       stat('Si mantienes la cuota original', yrs(r.termMonthsKeep), r.abonos ? 'en vez de ' + yrs(r.termMonthsOrig) : 'plazo total', 'abono') + '</div>';
-    h += '<div class="card"><h2>¿Y si abono más?</h2><label>Abono adicional simulado (Q)<input type="number" inputmode="decimal" id="sim" value="' + (extra || '') + '" placeholder="0.00"></label>' +
-      '<div class="kv"><span>Cuota total con ese abono</span><b>' + Q(fn) + '</b></div><div class="kv"><span>Diferencia contra hoy</span><b>' + Q(fn - r.totalNow) + '</b></div></div>';
+    h += '<div class="card"><h2>¿Y si abono más?</h2><p class="muted">Un abono a capital antes de que empiece tu crédito baja lo que le debes al banco. Mira qué pasaría con tu cuota y con los intereses.</p>' +
+      '<label style="margin-top:12px">Abono simulado (Q)<input type="number" inputmode="decimal" id="sim" value="' + (S.sim || '') + '" placeholder="0.00"></label>' +
+      '<div class="chips"><span class="muted">Atajos:</span>' + [10000, 25000, 50000, 100000].map(function (v) { return '<button class="chip" data-a="sim-e-fill" data-id="' + v + '">' + Q(v).replace('.00', '') + '</button>'; }).join('') + '</div>' +
+      '<div id="sim_e">' + simEngHtml(p, r) + '</div></div>';
     if (p.mantenimiento) h += '<p class="muted">Aparte del banco pagarás mantenimiento aproximado de ' + Q(p.mantenimiento) + ' al mes.</p>';
     if (p.cuotaCredito) h += '<p class="muted">Cotización original: ' + (p.cuotaNivelada ? 'cuota nivelada ' + Q(p.cuotaNivelada) + ' · ' : '') + 'cuota mensual de crédito ' + Q(p.cuotaCredito) + '.</p>';
     return h;
@@ -953,7 +970,7 @@
   /* ---------- eventos ---------- */
   document.addEventListener('click', function (e) { if (S.menu && !(e.target.closest && (e.target.closest('#menu') || e.target.closest('[data-a="menu"]')))) { S.menu = false; var m = $('menu'); if (m) m.remove(); } });
   function bind() {
-    var sim = $('sim'); if (sim) sim.oninput = function () { S.sim = numv('sim'); var pos = sim.selectionStart; render(); var n = $('sim'); n.focus(); try { n.setSelectionRange(pos, pos); } catch (e) { } };
+    var sim = $('sim'); if (sim) sim.oninput = function () { S.sim = numv('sim'); var pp = cur(), o = $('sim_e'); if (pp && o) o.innerHTML = simEngHtml(pp, C.compute(pp)); };
     Array.prototype.forEach.call($app.querySelectorAll('[data-tab]'), function (b) { b.onclick = function () { S.tab = b.dataset.tab; S.editing = null; S.anim = true; render(); window.scrollTo(0, 0); }; });
     Array.prototype.forEach.call($app.querySelectorAll('[data-a]'), function (b) { b.onclick = function (ev) { ev.preventDefault(); ev.stopPropagation(); act(b.dataset.a, b.dataset.id, b); }; });
     var sA = $('s_amt'), sM = $('s_mon');
@@ -1001,6 +1018,7 @@
         p.loan.abonos = p.loan.abonos || []; p.loan.abonos.push({ id: uid(), date: val('la_date') || today(), amount: aa, mode: val('la_mode') === 'cuota' ? 'cuota' : 'plazo', note: val('la_note').trim() });
         persist(p).then(function () { toast('Abono registrado'); render(); }); break; }
       case 'la-del': if (confirm('¿Eliminar este abono?')) { p.loan.abonos = p.loan.abonos.filter(function (x) { return x.id !== id; }); persist(p).then(render); } break;
+      case 'sim-e-fill': S.sim = +id; if ($('sim')) $('sim').value = id; { var pe = cur(), oe = $('sim_e'); if (pe && oe) oe.innerHTML = simEngHtml(pe, C.compute(pe)); } break;
       case 'sim-fill': S.sim2 = S.sim2 || {}; S.sim2.amt = id; if ($('s_amt')) $('s_amt').value = id; refreshSim(); break;
       case 'sim-mode': S.sim2 = S.sim2 || {}; S.sim2.mode = id; Array.prototype.forEach.call($('simMode').children, function (b) { b.classList.toggle('on', b.dataset.id === id); }); refreshSim(); break;
       case 'home': S.importDraft = null; S.menu = false; go('home'); break;
