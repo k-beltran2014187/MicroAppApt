@@ -776,6 +776,10 @@
   var plural = function (n, a, b) { return n + ' ' + (n === 1 ? a : b); };
   var spanYM = function (m) { var y = Math.floor(m / 12), mm = m % 12; return [y ? plural(y, 'año', 'años') : '', mm ? plural(mm, 'mes', 'meses') : ''].filter(Boolean).join(' y ') || '0 meses'; };
 
+  var MES_L = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+  var monthOptions = function (sel) { return MES_L.map(function (m, i) { return '<option value="' + (i + 1) + '"' + ((i + 1) === +sel ? ' selected' : '') + '>' + m + '</option>'; }).join(''); };
+  var recText = function (x) { return Q(x.amount) + (x.freq === 'month' ? ' cada mes' : ' cada año en ' + MES_L[(+x.month || 1) - 1]) + (x.from ? ' · desde ' + fmtMonth(x.from) : '') + (x.to ? ' hasta ' + fmtMonth(x.to) : '') + ' · ' + (x.mode === 'cuota' ? 'baja la cuota' : 'reduce el plazo'); };
+
   function pathYearsHtml(r) {
     var n = Math.ceil(r.totalRows / 12), segs = '';
     for (var i = 0; i < n; i++) { var f = Math.max(0, Math.min(1, (r.paidRows - i * 12) / 12)); segs += '<i class="seg ' + (f >= 1 ? 'on' : f > 0 ? 'part' : '') + '" style="--i:' + i + ';--p:' + f.toFixed(2) + '" data-tip="Año ' + (i + 1) + '"></i>'; }
@@ -794,13 +798,18 @@
     var nx = r.next;
     if (nx) h += '<div class="card next"><div class="ic">' + ic('calendar') + '</div><div class="tx"><b>Próxima cuota · ' + fmtMonth(nx.month) + '</b><span>Capital ' + Q(nx.principal) + ' · Interés ' + Q(nx.interest) + (r.fixed ? ' · IUSI/seguro ' + Q(r.fixed) : '') +
       (nx.status === 'vencida' ? ' <span class="tag" style="background:rgba(240,112,127,.15);color:var(--bad)">Atrasada</span>' : '') + '</span></div><div class="am">' + Q(Math.max(0, nx.need - nx.paid)) + '</div></div>';
-    else h += '<div class="card next"><div class="ic">' + ic('check') + '</div><div class="tx"><b>¡Crédito pagado!</b><span>Terminaste de pagar tu apartamento. Felicidades.</span></div></div>';
+    if (r.planDueNow && r.planDueNow.length) {
+      var dueSum = r.planDueNow.reduce(function (t, x) { return t + (+x.amount || 0); }, 0);
+      h += '<div class="card next"><div class="ic">' + ic('layers') + '</div><div class="tx"><b>Abono programado este mes</b><span>' + Q(dueSum) + ' a capital. Cuando lo hagas en tu banco, regístralo para actualizar tu saldo.</span></div><button class="btn sm" data-a="plan-register">Ya lo hice</button></div>';
+    }
+    if (!nx) h += '<div class="card next"><div class="ic">' + ic('check') + '</div><div class="tx"><b>¡Crédito pagado!</b><span>Terminaste de pagar tu apartamento. Felicidades.</span></div></div>';
     h += '<div class="grid">' +
       stat('Cuotas pagadas', cn(r.paidRows) + '<small style="display:inline;font-size:.5em;letter-spacing:0;color:var(--mut);margin-left:6px;font-family:var(--sans)">de ' + r.totalRows + '</small>', 'meses al día con el banco', 'ok') +
       stat('Te faltan', cn(r.remRows) + '<small style="display:inline;font-size:.5em;letter-spacing:0;color:var(--mut);margin-left:6px;font-family:var(--sans)">cuotas</small>', r.endMonth ? 'terminas en ' + fmtMonth(r.endMonth) : '') +
       stat('Cuota mensual', cq(r.totalMonthly), 'al banco' + (r.maint ? ' · + ' + Q(r.maint) + ' de mantenimiento' : ''), 'hero') +
       stat('Intereses pagados', cq(r.interestPaid), 'de ' + Q(r.interestTotal) + ' en total') +
       stat('Intereses por pagar', cq(r.interestRem), 'si sigues este plan') +
+      (r.hasPlan && r.planMonthsSaved > 0 ? stat('Con tu plan de abonos', r.endMonth ? fmtMonth(r.endMonth) : '—', 'terminas ' + spanYM(r.planMonthsSaved) + ' antes · ahorras ' + Q(r.planInterestSaved) + ' de interés', 'ok') : '') +
       (r.abonosTotal ? stat('Abonado a capital', cq(r.abonosTotal), (r.interestSaved ? 'te ahorra ' + Q(r.interestSaved) + ' de interés' : '') + (r.monthsSaved ? ' · ' + spanYM(r.monthsSaved) + ' menos' : ''), 'abono') : '') +
       (r.price ? stat('Tu parte del apto', cq(r.owned), 'de ' + Q(r.price) + ' de valor') : '') + '</div>';
     h += '<div class="card"><h2>Saldo de tu préstamo</h2><p class="muted" style="margin:-4px 0 10px">Cuánto capital te falta pagar con el tiempo. <a href="#" data-a="goto-tab" data-id="amort" class="lnk">Ver tabla</a></p>' + balanceChart(r) + '</div>';
@@ -814,7 +823,7 @@
   var compact = function (v) { return v >= 1e6 ? 'Q ' + (Math.round(v / 1e5) / 10) + ' M' : v >= 1e3 ? 'Q ' + Math.round(v / 1e3) + ' K' : 'Q ' + Math.round(v); };
   function balanceChart(r) {
     var cw = document.documentElement.clientWidth || 390, W = Math.max(280, Math.min(940, cw - 70)), H = W < 520 ? 230 : 290, m = { l: W < 520 ? 52 : 62, r: 14, t: 24, b: 30 }, pw = W - m.l - m.r, ph = H - m.t - m.b;
-    var rows = r.rows, base = r.abonosTotal > 0 && r.baseRows && r.baseRows.length ? r.baseRows : null, N = Math.max(rows.length, base ? base.length : 0), max = r.principal || 1, start = rows[0].month;
+    var rows = r.rows, base = (r.abonosTotal > 0 || r.hasPlan) && r.baseRows && r.baseRows.length ? r.baseRows : null, N = Math.max(rows.length, base ? base.length : 0), max = r.principal || 1, start = rows[0].month;
     var X = function (i) { return m.l + (N ? i / N * pw : 0); }, Y = function (v) { return m.t + ph - Math.min(1, Math.max(0, v / max)) * ph; };
     var vals = [r.principal].concat(rows.map(function (x) { return x.balance; })), bvals = base ? [r.principal].concat(base.map(function (x) { return x.balance; })) : null;
     var line = function (a) { return a.map(function (v, i) { return (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(v).toFixed(1); }).join(''); };
@@ -880,6 +889,15 @@
         '<div><label>Fecha<input type="date" id="la_date" value="' + today() + '"></label></div><div><label>Monto del abono (Q)<input type="number" inputmode="decimal" step="0.01" id="la_amt" placeholder="0.00"></label></div></div>' +
         '<div class="row" style="margin-top:10px"><div><label>El banco lo aplica para<select id="la_mode"><option value="plazo">Pagar menos meses (reduce el plazo)</option><option value="cuota">Bajar la cuota mensual</option></select></label></div><div><label>Nota (opcional)<input id="la_note" placeholder="Ej. bono de fin de año"></label></div></div>' +
         '<div class="actions"><button class="btn" data-a="la-save">Registrar abono</button></div></div>';
+      h += '<div class="card"><h2>Abonos programados</h2><p class="muted">¿Tu banco te deja abonar a capital cada año o cada mes? Prográmalo y mira cuánto cambia tu fecha de término y tus intereses. Muchas personas usan el <b>Bono 14</b> (julio) o el <b>aguinaldo</b> (diciembre).</p>' +
+        (r.recurring.length ? '<div style="margin:6px 0 12px">' + r.recurring.map(function (x) { return '<div class="park"><div class="nm">' + esc(recText(x)) + '</div><button class="btn danger sm" data-a="rc-del" data-id="' + x.id + '" aria-label="Quitar">' + ic('x') + '</button></div>'; }).join('') + '</div>' : '') +
+        (r.hasPlan ? '<div class="note" style="margin-top:0">Con tu plan terminarías en <b>' + (r.endMonth ? fmtMonth(r.endMonth) : '—') + '</b>' + (r.planMonthsSaved ? ' (' + spanYM(r.planMonthsSaved) + ' antes)' : '') + ' y ahorrarías <b>' + Q(r.planInterestSaved) + '</b> en intereses.</div>' : '') +
+        '<div class="chips" style="margin:4px 0 8px"><span class="muted">Atajos:</span><button class="chip" data-a="rc-preset" data-id="7">Bono 14 (julio)</button><button class="chip" data-a="rc-preset" data-id="12">Aguinaldo (diciembre)</button></div>' +
+        '<div class="row"><div><label>Monto del abono (Q)<input type="number" inputmode="decimal" id="rc_amt" placeholder="0.00"></label></div>' +
+        '<div><label>Con qué frecuencia<select id="rc_freq"><option value="year">Cada año</option><option value="month">Cada mes</option></select></label></div></div>' +
+        '<div class="row" style="margin-top:10px"><div><label>Mes del año (si es cada año)<select id="rc_month">' + monthOptions(7) + '</select></label></div><div><label>Empezar en<input type="month" id="rc_from" value="' + C.curMonth() + '"></label></div></div>' +
+        '<div class="row" style="margin-top:10px"><div><label>Terminar en (opcional)<input type="month" id="rc_to"></label></div><div><label>El banco lo aplica para<select id="rc_mode"><option value="plazo">Pagar menos meses</option><option value="cuota">Bajar la cuota</option></select></label></div></div>' +
+        '<div class="actions"><button class="btn" data-a="rc-save">Programar abono</button></div></div>';
     }
     var pays = r.payments.slice().reverse();
     h += '<div class="card"><h2>Pagos de la cuota (' + pays.length + ')</h2>' + (pays.length ? '<div class="tbl-wrap"><table class="table"><thead><tr><th>Fecha</th><th class="n">Monto</th><th class="hide-s">Nota</th><th></th></tr></thead><tbody>' +
@@ -902,16 +920,16 @@
     } else {
       var list = v === 'todas' ? r.rows : r.rows.slice(Math.max(0, r.paidRows - 2), r.paidRows + 12);
       h += '<div class="tbl-wrap"><table class="table"><thead><tr><th>#</th><th>Mes</th><th class="n hide-s">Cuota</th><th class="n hide-s">Capital</th><th class="n hide-s">Interés</th><th class="n">Saldo</th><th>Estado</th></tr></thead><tbody>' +
-        list.map(function (x) { return '<tr><td>' + x.n + '</td><td>' + fmtMonth(x.month) + (x.extra ? ' <span class="tag" style="background:rgba(139,108,240,.16);color:var(--violet)">+ abono</span>' : '') + '</td><td class="n hide-s">' + Q(x.payment) + '</td><td class="n hide-s">' + Q(x.principal) + '</td><td class="n hide-s">' + Q(x.interest) + '</td><td class="n">' + Q(x.balance) + '</td><td><span class="badge b-' + x.status + '">' + x.status + '</span></td></tr>'; }).join('') + '</tbody></table></div>';
+        list.map(function (x) { return '<tr><td>' + x.n + '</td><td>' + fmtMonth(x.month) + (x.extraPlan > 0 ? ' <span class="tag" style="background:rgba(var(--a-rgb),.15);color:var(--acc)">+ abono programado</span>' : (x.extra ? ' <span class="tag" style="background:rgba(139,108,240,.16);color:var(--violet)">+ abono</span>' : '')) + '</td><td class="n hide-s">' + Q(x.payment) + '</td><td class="n hide-s">' + Q(x.principal) + '</td><td class="n hide-s">' + Q(x.interest) + '</td><td class="n">' + Q(x.balance) + '</td><td><span class="badge b-' + x.status + '">' + x.status + '</span></td></tr>'; }).join('') + '</tbody></table></div>';
       if (v === 'prox') h += '<p class="muted" style="margin:10px 0 0">Mostrando las próximas cuotas. Usa “Todas” para ver las ' + r.totalRows + '.</p>';
     }
     return h + '</div><p class="muted">La tabla es una proyección con tasa fija. Si tu banco ajusta la tasa o cobra cargos, tus cuotas reales pueden variar un poco.</p>';
   }
 
   function simOutHtml(p, r) {
-    var s2 = S.sim2 || {}, a = +s2.amt || 0, mo = +s2.mon || 0;
-    if (!a && !mo) return '<p class="muted" style="margin:14px 0 0">Escribe un monto para ver el resultado.</p>';
-    var s = C.loanSimulate(p, { amount: a, mode: s2.mode || 'plazo', monthlyExtra: mo > 0 ? { amount: mo, from: r.next ? r.next.month : C.curMonth() } : null });
+    var s2 = S.sim2 || {}, a = +s2.amt || 0, mo = +s2.mon || 0, yr = +s2.yr || 0;
+    if (!a && !mo && !yr) return '<p class="muted" style="margin:14px 0 0">Escribe un monto para ver el resultado.</p>';
+    var s = C.loanSimulate(p, { amount: a, mode: s2.mode || 'plazo', monthlyExtra: mo > 0 ? { amount: mo, from: r.next ? r.next.month : C.curMonth() } : null, yearly: yr > 0 ? { amount: yr, month: +s2.ym || 7 } : null });
     return '<div class="grid" style="margin:16px 0 0">' +
       stat('Terminarías en', s.endMonth ? fmtMonth(s.endMonth) : '—', s.monthsSaved > 0 ? spanYM(s.monthsSaved) + ' antes que hoy' : 'sin cambio de plazo', s.monthsSaved > 0 ? 'ok' : '') +
       stat('Ahorrarías en intereses', mh(s.interestSaved), 'frente a seguir como vas', 'hero') +
@@ -922,13 +940,15 @@
     if (!r.ok) return '<div class="card"><p class="muted">Completa los datos del crédito en la pestaña Proyecto.</p></div>';
     S.sim2 = S.sim2 || { amt: '', mode: 'plazo', mon: '' }; var s2 = S.sim2;
     return '<div class="card"><h2>¿Y si abono más?</h2><p class="muted">Simula un abono a capital y mira cuánto te ahorras en intereses. Pregunta a tu banco si el abono reduce el plazo o la cuota.</p>' +
-      '<div class="row" style="margin-top:12px"><div><label>Abono único (Q)<input type="number" inputmode="decimal" id="s_amt" value="' + esc(s2.amt) + '" placeholder="0.00"></label></div><div><label>Abono mensual (Q)<input type="number" inputmode="decimal" id="s_mon" value="' + esc(s2.mon) + '" placeholder="0.00"></label></div></div>' +
+      '<div class="row" style="margin-top:12px"><div><label>Abono único (Q)<input type="number" inputmode="decimal" id="s_amt" value="' + esc(s2.amt) + '" placeholder="0.00"></label></div><div><label>Abono cada mes (Q)<input type="number" inputmode="decimal" id="s_mon" value="' + esc(s2.mon) + '" placeholder="0.00"></label></div></div>' +
+      '<div class="row" style="margin-top:10px"><div><label>Abono cada año (Q)<input type="number" inputmode="decimal" id="s_yr" value="' + esc(s2.yr || '') + '" placeholder="0.00"></label></div><div><label>¿En qué mes del año?<select id="s_ym">' + monthOptions(s2.ym || 7) + '</select></label></div></div>' +
       '<div class="chips"><span class="muted">Abono único:</span>' + [10000, 25000, 50000, 100000].map(function (v) { return '<button class="chip" data-a="sim-fill" data-id="' + v + '">' + Q(v).replace('.00', '') + '</button>'; }).join('') + '</div>' +
       '<label style="margin-top:14px">Tu banco lo aplica para</label><div class="seg2" id="simMode"><button type="button" data-a="sim-mode" data-id="plazo" class="' + (s2.mode !== 'cuota' ? 'on' : '') + '">Pagar menos meses</button><button type="button" data-a="sim-mode" data-id="cuota" class="' + (s2.mode === 'cuota' ? 'on' : '') + '">Bajar la cuota</button></div>' +
-      '<div id="sim_out">' + simOutHtml(p, r) + '</div></div>' +
+      '<div id="sim_out">' + simOutHtml(p, r) + '</div><div id="sim_save">' + simSaveHtml() + '</div></div>' +
       '<div class="card"><h2>El costo real de tu crédito</h2><div class="kv"><span>Préstamo</span><b>' + Q(r.principal) + '</b></div><div class="kv"><span>Intereses totales (plan actual)</span><b style="color:var(--int)">' + Q(r.interestTotal) + '</b></div><div class="kv"><span>Total a pagar al banco</span><b>' + Q(r.totalToPay) + '</b></div><div class="kv"><span>Los intereses son</span><b>' + (r.principal ? (r.interestTotal / r.principal * 100).toFixed(0) : 0) + '% del préstamo</b></div></div>';
   }
-  function refreshSim() { var p = cur(), o = $('sim_out'); if (p && o && isLoan(p)) o.innerHTML = simOutHtml(p, C.loanCompute(p)); }
+  function simSaveHtml() { var s2 = S.sim2 || {}; return ((+s2.yr || 0) > 0 || (+s2.mon || 0) > 0) ? '<div class="actions"><button class="btn sec" data-a="sim-save-plan">Programar estos abonos</button></div><p class="muted" style="margin:8px 0 0">Los guarda en Pagos → Abonos programados, para que cuenten en tu resumen y en la gráfica.</p>' : ''; }
+  function refreshSim() { var p = cur(), o = $('sim_out'); if (p && o && isLoan(p)) { o.innerHTML = simOutHtml(p, C.loanCompute(p)); var sv = $('sim_save'); if (sv) sv.innerHTML = simSaveHtml(); Array.prototype.forEach.call((sv || document).querySelectorAll('[data-a]'), function (b) { b.onclick = function (ev) { ev.preventDefault(); act(b.dataset.a, b.dataset.id, b); }; }); } }
 
   function colorPicker(p, pre) { return '<label style="margin-top:14px">Color del proyecto</label><div class="swatches" id="' + pre + 'sw">' + ACCENTS.map(function (a) { return '<button type="button" class="sw' + (a.k === accentOf(p.color) ? ' on' : '') + '" style="--c1:' + a.c1 + ';--c2:' + a.c2 + '" data-a="color" data-v="' + a.k + '" data-pre="' + pre + '" title="' + a.n + '" aria-label="' + a.n + '"></button>'; }).join('') + '</div>'; }
   function loanFields(p, pre, setup) {
@@ -976,6 +996,9 @@
     var sA = $('s_amt'), sM = $('s_mon');
     if (sA) sA.oninput = function () { S.sim2 = S.sim2 || {}; S.sim2.amt = sA.value; refreshSim(); };
     if (sM) sM.oninput = function () { S.sim2 = S.sim2 || {}; S.sim2.mon = sM.value; refreshSim(); };
+    var sY = $('s_yr'), sYM = $('s_ym');
+    if (sY) sY.oninput = function () { S.sim2 = S.sim2 || {}; S.sim2.yr = sY.value; refreshSim(); };
+    if (sYM) sYM.onchange = function () { S.sim2 = S.sim2 || {}; S.sim2.ym = sYM.value; refreshSim(); };
     var drop = $('drop');
     if (drop) {
       ['dragenter', 'dragover'].forEach(function (n) { drop.addEventListener(n, function (e) { e.preventDefault(); drop.classList.add('over'); }); });
@@ -1017,6 +1040,23 @@
         var aa = numv('la_amt'); if (!aa) return toast('Escribe el monto del abono');
         p.loan.abonos = p.loan.abonos || []; p.loan.abonos.push({ id: uid(), date: val('la_date') || today(), amount: aa, mode: val('la_mode') === 'cuota' ? 'cuota' : 'plazo', note: val('la_note').trim() });
         persist(p).then(function () { toast('Abono registrado'); render(); }); break; }
+      case 'rc-preset': { if ($('rc_freq')) $('rc_freq').value = 'year'; if ($('rc_month')) $('rc_month').value = id; if ($('rc_amt')) $('rc_amt').focus(); break; }
+      case 'rc-save': {
+        var ra = numv('rc_amt'); if (!ra) return toast('Escribe el monto del abono');
+        var rfrom = val('rc_from') || C.curMonth(), rto = val('rc_to'); if (rto && rto < rfrom) return toast('“Terminar en” debe ser después de “Empezar en”');
+        p.loan.recurring = p.loan.recurring || []; p.loan.recurring.push({ id: uid(), amount: ra, freq: val('rc_freq') === 'month' ? 'month' : 'year', month: +val('rc_month') || 7, from: rfrom, to: rto || '', mode: val('rc_mode') === 'cuota' ? 'cuota' : 'plazo' });
+        persist(p).then(function () { var rr2 = C.loanCompute(p); toast('Programado. Terminarías en ' + (rr2.endMonth ? fmtMonth(rr2.endMonth) : '—') + (rr2.planInterestSaved ? ' y ahorrarías ' + Q(rr2.planInterestSaved) : '')); render(); }); break; }
+      case 'rc-del': if (confirm('¿Quitar este abono programado?')) { p.loan.recurring = (p.loan.recurring || []).filter(function (x) { return x.id !== id; }); persist(p).then(render); } break;
+      case 'plan-register': {
+        var rrr = C.loanCompute(p); p.loan.abonos = p.loan.abonos || [];
+        rrr.planDueNow.forEach(function (x) { p.loan.abonos.push({ id: uid(), date: today(), amount: +x.amount, mode: x.mode === 'cuota' ? 'cuota' : 'plazo', note: 'Abono programado' }); });
+        persist(p).then(function () { toast('Abono registrado'); render(); }); break; }
+      case 'sim-save-plan': {
+        var s3 = S.sim2 || {}, nowM = C.curMonth(); p.loan.recurring = p.loan.recurring || [];
+        if (+s3.yr > 0) p.loan.recurring.push({ id: uid(), amount: +s3.yr, freq: 'year', month: +s3.ym || 7, from: nowM, to: '', mode: s3.mode === 'cuota' ? 'cuota' : 'plazo' });
+        if (+s3.mon > 0) p.loan.recurring.push({ id: uid(), amount: +s3.mon, freq: 'month', month: 1, from: nowM, to: '', mode: s3.mode === 'cuota' ? 'cuota' : 'plazo' });
+        S.sim2 = { amt: s3.amt || '', mode: s3.mode || 'plazo', mon: '', yr: '', ym: s3.ym || 7 };
+        persist(p).then(function () { toast('Abonos programados guardados'); S.tab = 'pagos'; S.anim = true; render(); window.scrollTo(0, 0); }); break; }
       case 'la-del': if (confirm('¿Eliminar este abono?')) { p.loan.abonos = p.loan.abonos.filter(function (x) { return x.id !== id; }); persist(p).then(render); } break;
       case 'sim-e-fill': S.sim = +id; if ($('sim')) $('sim').value = id; { var pe = cur(), oe = $('sim_e'); if (pe && oe) oe.innerHTML = simEngHtml(pe, C.compute(pe)); } break;
       case 'sim-fill': S.sim2 = S.sim2 || {}; S.sim2.amt = id; if ($('s_amt')) $('s_amt').value = id; refreshSim(); break;

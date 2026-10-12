@@ -82,20 +82,27 @@
     var ab = (L.abonos || []).concat(o.extraAbonos || []).map(function (a) { return { m: String(a.date || '').slice(0, 7), amount: +a.amount || 0, mode: a.mode || 'plazo' }; })
       .filter(function (a) { return a.amount > 0 && a.m; });
     var byM = {}; ab.forEach(function (a) { var m = a.m < L.startMonth ? L.startMonth : a.m; (byM[m] = byM[m] || []).push(a); });
+    // Abonos programados (cada año / cada mes): solo del mes actual en adelante y solo si ese mes no tiene ya un abono real registrado.
+    var rec = (L.recurring || []).concat(o.extraRec || []).filter(function (x) { return +x.amount > 0; });
+    var realM = {}; (L.abonos || []).forEach(function (a) { var m = String(a.date || '').slice(0, 7); if (m) realM[m < L.startMonth ? L.startMonth : m] = true; });
     var rows = [], B = P, k = 0, ti = 0, guard = n0 + 1200, stuck = false;
     while (B > 0.005 && k < guard) {
       k++;
       var month = addMonths(L.startMonth, k - 1), interest = B * r, princ = Math.min(B, pay - interest);
       if (princ <= 0) { stuck = true; break; } // la cuota no alcanza ni para los intereses
       B -= princ;
-      var extra = 0, list = byM[month] || [];
+      var extra = 0, extraPlan = 0, list = (byM[month] || []).slice();
       if (o.monthlyExtra && o.monthlyExtra.amount > 0 && month >= (o.monthlyExtra.from || month)) list = list.concat([{ amount: +o.monthlyExtra.amount, mode: 'plazo' }]);
+      if (rec.length && o.planNow && month >= o.planNow && !realM[month]) rec.forEach(function (x) {
+        if (month < (x.from || o.planNow) || (x.to && month > x.to)) return;
+        if (x.freq === 'month' || +x.month === +month.slice(5, 7)) list.push({ amount: +x.amount, mode: x.mode || 'plazo', plan: true });
+      });
       list.forEach(function (a) {
-        var Bb = B, x = Math.min(a.amount, B); B -= x; extra += x;
+        var Bb = B, x = Math.min(a.amount, B); B -= x; extra += x; if (a.plan) extraPlan += x;
         // "bajar la cuota": se mantiene la fecha de término que ya tenía el plan (no se vuelve a estirar al plazo original)
         if (a.mode === 'cuota' && B > 0.005) { var rem = monthsToPay(Bb, rate, pay); pay = isFinite(rem) && rem > 0 ? pmt(B, rate, Math.max(1, rem) / 12) : B * (1 + r); }
       });
-      rows.push({ n: k, month: month, payment: princ + interest, interest: interest, principal: princ, extra: extra, balance: Math.max(0, B) });
+      rows.push({ n: k, month: month, payment: princ + interest, interest: interest, principal: princ, extra: extra, extraPlan: extraPlan, balance: Math.max(0, B) });
       ti += interest;
     }
     return { rows: rows, pay0: pay0, totalInterest: ti, months: rows.length, ok: !stuck, n0: n0 };
@@ -103,7 +110,7 @@
 
   function loanCompute(p, now) {
     var L = p.loan || {}, fixed = (+p.iusi || 0) + (+p.seguro || 0), cm = curMonth(now);
-    var s = loanSchedule(L), base = loanSchedule(Object.assign({}, L, { abonos: [] }));
+    var s = loanSchedule(L, { planNow: cm }), sNoPlan = loanSchedule(L), base = loanSchedule(Object.assign({}, L, { abonos: [], recurring: [] }));
     var pays = (L.payments || []).slice().sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
     var abonos = (L.abonos || []).slice().sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
     var left = r2(pays.reduce(function (t, x) { return t + (+x.amount || 0); }, 0)), paidRows = 0;
@@ -115,13 +122,16 @@
       return Object.assign({}, rw, { need: need, paid: r2(paid), status: st });
     });
     var P = +L.principal || 0, extraLater = 0;
-    for (var i = paidRows; i < rows.length; i++) if (rows[i].month <= cm) extraLater += rows[i].extra;
+    for (var i = paidRows; i < rows.length; i++) if (rows[i].month <= cm) extraLater += rows[i].extra - (rows[i].extraPlan || 0);
     var balPaid = paidRows > 0 ? rows[paidRows - 1].balance : P, saldo = Math.max(0, balPaid - extraLater);
     var intPaid = 0, intRem = 0; rows.forEach(function (rw, j) { if (j < paidRows) intPaid += rw.interest; else intRem += rw.interest; });
     var next = rows[paidRows] || null, payNow = next ? next.payment : (rows.length ? rows[rows.length - 1].payment : 0);
     var abonosTotal = r2(abonos.reduce(function (t, a) { return t + (+a.amount || 0); }, 0));
-    var price = +p.price || 0;
+    var price = +p.price || 0, rec = (L.recurring || []).filter(function (x) { return +x.amount > 0; });
+    var realNow = abonos.some(function (a) { return String(a.date || '').slice(0, 7) === cm; });
+    var dueNow = realNow ? [] : rec.filter(function (x) { return cm >= (x.from || cm) && (!x.to || cm <= x.to) && (x.freq === 'month' || +x.month === +cm.slice(5, 7)); });
     return {
+      recurring: rec, hasPlan: rec.length > 0, planDueNow: dueNow, planInterestSaved: r2(Math.max(0, sNoPlan.totalInterest - s.totalInterest)), planMonthsSaved: Math.max(0, sNoPlan.months - s.months),
       ok: s.ok && rows.length > 0, rows: rows, principal: P, pay0: r2(s.pay0), payNow: r2(payNow), fixed: r2(fixed), totalMonthly: r2(payNow + fixed), maint: +p.mantenimiento || 0,
       paidRows: paidRows, totalRows: rows.length, remRows: rows.length - paidRows, next: next, endMonth: rows.length ? rows[rows.length - 1].month : null,
       saldo: r2(saldo), capitalPaid: r2(Math.max(0, P - saldo)), pctPaid: P ? Math.min(100, Math.max(0, (P - saldo) / P * 100)) : 0,
@@ -134,9 +144,10 @@
   }
   // ¿Y si abono? Compara contra el plan actual. mode: 'plazo' (menos meses) | 'cuota' (cuota menor)
   function loanSimulate(p, o, now) {
-    var L = p.loan || {}, cm = curMonth(now), at = cm < L.startMonth ? L.startMonth : cm, cur = loanSchedule(L), ex = [];
+    var L = p.loan || {}, cm = curMonth(now), at = cm < L.startMonth ? L.startMonth : cm, cur = loanSchedule(L, { planNow: cm }), ex = [];
     if (o.amount > 0) ex.push({ date: at + '-01', amount: o.amount, mode: o.mode || 'plazo' });
-    var s = loanSchedule(L, { extraAbonos: ex, monthlyExtra: o.monthlyExtra });
+    var xr = []; if (o.yearly && +o.yearly.amount > 0) xr.push({ amount: +o.yearly.amount, freq: 'year', month: +o.yearly.month || 7, from: at, mode: o.mode || 'plazo' });
+    var s = loanSchedule(L, { planNow: cm, extraAbonos: ex, monthlyExtra: o.monthlyExtra, extraRec: xr });
     var idx = s.rows.findIndex(function (rw) { return rw.month > at; });
     return { months: s.months, monthsSaved: Math.max(0, cur.months - s.months), interestTotal: r2(s.totalInterest), interestSaved: r2(Math.max(0, cur.totalInterest - s.totalInterest)),
       newPayment: r2(idx >= 0 ? s.rows[idx].payment : (s.rows.length ? s.rows[s.rows.length - 1].payment : 0)), endMonth: s.rows.length ? s.rows[s.rows.length - 1].month : null };
