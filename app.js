@@ -109,15 +109,15 @@
   function idbOpen() {
     if (idb) return idb;
     idb = new Promise(function (ok, bad) {
-      var r = indexedDB.open('enganche-files', 1);
-      r.onupgradeneeded = function () { r.result.createObjectStore('blobs'); };
+      var r = indexedDB.open('enganche-files', 2);
+      r.onupgradeneeded = function () { var d = r.result; if (!d.objectStoreNames.contains('blobs')) d.createObjectStore('blobs'); if (!d.objectStoreNames.contains('thumbs')) d.createObjectStore('thumbs'); };
       r.onsuccess = function () { ok(r.result); }; r.onerror = function () { bad(r.error); };
     });
     return idb;
   }
-  function idbDo(mode, fn) {
+  function idbDo(mode, fn, storeName) {
     return idbOpen().then(function (db) {
-      return new Promise(function (ok, bad) { var tx = db.transaction('blobs', mode), req = fn(tx.objectStore('blobs')); tx.oncomplete = function () { ok(req && req.result); }; tx.onerror = function () { bad(tx.error); }; });
+      return new Promise(function (ok, bad) { var tx = db.transaction(storeName || 'blobs', mode), req = fn(tx.objectStore(storeName || 'blobs')); tx.oncomplete = function () { ok(req && req.result); }; tx.onerror = function () { bad(tx.error); }; });
     });
   }
   var Files = {
@@ -131,6 +131,7 @@
     },
     del: function (id) {
       if (store.mode === 'cloud') return sb.storage.from('planos').remove([S.user.id + '/' + id]).then(function (r) { if (r.error) throw r.error; });
+      idbDo('readwrite', function (s) { return s.delete(id); }, 'thumbs').catch(function () { });
       return idbDo('readwrite', function (s) { return s.delete(id); });
     }
   };
@@ -169,7 +170,6 @@
     Array.prototype.forEach.call($app.querySelectorAll('[data-w]'), function (b) { var v = b.dataset.w; if (S.anim && !reduced) { b.style.width = '0'; requestAnimationFrame(function () { requestAnimationFrame(function () { b.style.width = v + '%'; }); }); } else b.style.width = v + '%'; });
     if (S.anim && !reduced) Array.prototype.forEach.call($app.querySelectorAll('[data-cu]'), countUp);
     var orb = $('heroOrb'); if (orb) mountOrbIn(orb, { state: 'reasoning', size: 72, label: 'Mi Enganche' });
-    var bo = $('brandOrb'); if (bo) mountOrbIn(bo, { state: 'base', size: 28, label: 'Mi Enganche' });
     S.anim = false;
   }
   function countUp(el) {
@@ -183,7 +183,7 @@
   var label = function (p) { return (p.name || 'Proyecto') + (p.unit ? ' · Apto ' + p.unit : ''); };
   function headerHtml() {
     var opts = S.projects.map(function (p) { return '<option value="' + p.id + '"' + (p.id === S.id ? ' selected' : '') + '>' + esc(label(p)) + '</option>'; }).join('');
-    return '<div class="ambient" aria-hidden="true"><i></i><i></i><i></i></div><header class="top"><div class="wrap"><span class="brand"><span id="brandOrb"></span>Mi Enganche</span>' +
+    return '<div class="ambient" aria-hidden="true"><i></i><i></i><i></i></div><header class="top"><div class="wrap"><span class="brand"><svg width="26" height="26" viewBox="0 0 512 512" aria-hidden="true"><rect width="512" height="512" rx="110" fill="rgba(255,255,255,.2)"/><path d="M96 280 256 140l160 140v132H96z" fill="#fff"/><rect x="224" y="320" width="64" height="92" fill="rgba(0,0,0,.35)"/></svg>Mi Enganche</span>' +
       (S.projects.length && !S.needAuth ? '<select id="sel" aria-label="Proyecto">' + opts + '</select>' : '') +
       '<button class="ibtn" data-a="theme" title="Tema: ' + THEME_NAME[themePref] + '" aria-label="Cambiar tema">' + THEME_ICON[themePref] + '</button>' +
       '<button class="ibtn" data-a="new" aria-label="Nuevo proyecto">＋</button>' +
@@ -318,9 +318,10 @@
     (p.files || []).forEach(function (x) {
       if (S.thumbs[x.id]) return;
       S.thumbs[x.id] = 'pending';
-      Files.get(x.id).then(function (blob) {
-        if (x.type === 'application/pdf') return renderPdfThumb(blob);
-        return makeImgThumb(blob);
+      idbDo('readonly', function (s) { return s.get(x.id); }, 'thumbs').catch(function () { return null; }).then(function (cached) {
+        if (cached) return cached;
+        return Files.get(x.id).then(function (blob) { return x.type === 'application/pdf' ? renderPdfThumb(blob) : makeImgThumb(blob); })
+          .then(function (url) { idbDo('readwrite', function (s) { return s.put(url, x.id); }, 'thumbs').catch(function () { }); return url; });
       }).then(function (url) { S.thumbs[x.id] = url; var el = document.querySelector('[data-th="' + x.id + '"]'); if (el) el.innerHTML = '<img alt="" src="' + url + '">'; })
         .catch(function () { delete S.thumbs[x.id]; });
     });
@@ -579,10 +580,10 @@
 
   /* ---------- arranque ---------- */
   function boot() {
-    busy('Cargando tus proyectos…');
+    var slow = store.mode === 'cloud'; if (slow) busy('Cargando tus proyectos…');
     store.load().then(function (list) {
-      unbusy(); S.projects = list; S.id = (list.filter(function (p) { return p.id === S.id; })[0] || list[0] || {}).id || null; S.anim = true; render();
-    }).catch(function (e) { unbusy(); toast('No se pudieron cargar los datos: ' + (e.message || e)); render(); });
+      if (slow) unbusy(); S.projects = list; S.id = (list.filter(function (p) { return p.id === S.id; })[0] || list[0] || {}).id || null; S.anim = true; render();
+    }).catch(function (e) { if (slow) unbusy(); toast('No se pudieron cargar los datos: ' + (e.message || e)); render(); });
   }
   function init() {
     applyTheme();
