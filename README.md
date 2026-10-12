@@ -9,7 +9,11 @@ Funciona en teléfono y computadora; se puede "instalar" desde el navegador.
 - **Pagos**: uno a uno o **varios meses de una vez**. Cada pago tiene "enganche" y "abono" separados.
 - **Pestañas**: Resumen · Pagos · Calendario · Préstamo · Proyecto.
 - Los abonos reducen el monto a financiar y recalculan la cuota proyectada.
-- Respaldo/restauración en JSON.
+- **Parqueos**: se registran aparte (cotizados o comprados) y se pagan por separado; no entran al enganche ni al préstamo.
+- **Planos**: sube PDF o imágenes por proyecto, míralos en un visor con zoom y descárgalos. Local: se guardan en el dispositivo (IndexedDB); nube: Supabase Storage.
+- **Tema claro/oscuro/automático** (botón del encabezado) y **color por proyecto**.
+- Animaciones premium con [Thinking Orbs](https://github.com/yogesharc/thinking-orbs) (respetan "reducir movimiento").
+- Respaldo/restauración en JSON (sin planos).
 
 ## Probar en local
     python3 -m http.server 8000   # http://localhost:8000
@@ -17,7 +21,7 @@ Funciona en teléfono y computadora; se puede "instalar" desde el navegador.
 Por defecto está en **modo local** (datos solo en ese navegador).
 
 ## Cuentas de usuario y sincronización (Supabase, gratis)
-1. Crea un proyecto en https://supabase.com y ejecuta `supabase.sql` en *SQL Editor*.
+1. Crea un proyecto en https://supabase.com y ejecuta `supabase.sql` en *SQL Editor* (también crea el bucket privado `planos`).
 2. Pega `Project URL` y la clave `anon` en `config.js`.
 3. En *Authentication > URL Configuration* agrega tu subdominio como Site URL.
 Cada usuario solo ve sus propios proyectos (RLS).

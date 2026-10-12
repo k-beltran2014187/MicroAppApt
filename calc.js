@@ -44,6 +44,10 @@
     var next = sched.filter(function (s) { return s.status !== 'pagada'; })[0] || null;
     var overpaid = left > 0.005 ? left : 0; // enganche pagado de más (excede el total)
 
+    // Parqueos: se pagan aparte, no forman parte del enganche ni del préstamo.
+    var parkTotal = r2((p.parkings || []).filter(function (k) { return k.bought; }).reduce(function (t, k) { return t + (+k.price || 0); }, 0));
+    var parkPaid = r2(pays.reduce(function (t, x) { return t + (+x.parqueo || 0); }, 0));
+
     var financedOrig = r2((+p.price || 0) - engTotal);
     var financedNow = Math.max(0, r2(financedOrig - abonos));
     var fixed = (+p.iusi || 0) + (+p.seguro || 0);
@@ -55,6 +59,8 @@
       engTotal: engTotal, paidEng: paidEng, remEng: Math.max(0, r2(engTotal - paidEng)),
       pctEng: engTotal ? Math.min(100, paidEng / engTotal * 100) : 0,
       abonos: abonos, overpaid: overpaid,
+      parkTotal: parkTotal, parkPaid: parkPaid, parkRem: Math.max(0, r2(parkTotal - parkPaid)),
+      parkPct: parkTotal ? Math.min(100, parkPaid / parkTotal * 100) : 0,
       cuotasPagadas: cuotasPagadas, cuotasFaltan: Math.max(0, months - cuotasPagadas), next: next,
       financedOrig: financedOrig, financedNow: financedNow,
       pmtOrig: r2(pmtOrig), pmtNow: r2(pmtNow), fixed: r2(fixed),
