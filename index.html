@@ -5,7 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Mi Enganche</title>
   <meta name="description" content="Controla los pagos de enganche, abonos, parqueos y planos de tus apartamentos.">
-  <meta name="theme-color" content="#0f766e">
+  <meta name="theme-color" content="#090b10">
+  <link rel="preload" href="fonts/inter.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="fonts/cormorant.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icon.svg">
@@ -13,7 +15,8 @@
     /* evita el destello: aplica el tema guardado antes de pintar */
     (function () { var t = 'auto'; try { t = localStorage.getItem('enganche.theme') || 'auto'; } catch (e) { }
       if (t === 'auto') t = window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-      document.documentElement.dataset.theme = t; })();
+      document.documentElement.dataset.theme = t;
+      var a = 'gold'; try { a = localStorage.getItem('enganche.accent') || 'gold'; } catch (e) { } document.documentElement.dataset.accent = a; })();
   </script>
   <link rel="stylesheet" href="styles.css">
 </head>

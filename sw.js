@@ -1,5 +1,5 @@
-const CACHE = 'enganche-v4';
-const SHELL = ['./', 'index.html', 'styles.css', 'app.js', 'calc.js', 'quote.js', 'config.js', 'icon.svg', 'manifest.webmanifest'];
+const CACHE = 'enganche-v5';
+const SHELL = ['./', 'index.html', 'styles.css', 'app.js', 'calc.js', 'quote.js', 'config.js', 'icon.svg', 'manifest.webmanifest', 'fonts/inter.woff2', 'fonts/cormorant.woff2'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL))); self.skipWaiting(); });
 self.addEventListener('activate', e => {
   e.waitUntil(caches.keys().then(k => Promise.all(k.filter(x => x !== CACHE).map(x => caches.delete(x)))));
