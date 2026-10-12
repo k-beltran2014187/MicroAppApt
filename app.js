@@ -245,8 +245,8 @@
   function tabsHtml() { var pp = cur(); return '<nav class="tabs"><div class="tabs-in">' + tabsFor(pp).map(function (t) { return '<button data-tab="' + t[0] + '" class="' + (S.tab === t[0] ? 'on' : '') + '">' + t[1] + '</button>'; }).join('') + '<i class="ind"></i></div></nav>'; }
   function welcomeHtml() {
     return migBanner() + '<div class="welcome"><div class="heroorb" id="heroOrb"></div><div class="eyebrow">Control de enganche</div><h1>Tu apartamento, siempre bajo control.</h1>' +
-      '<p class="lead">Sube tu cotización y sigue cada cuota, abono y parqueo, con tus planos siempre a la mano.</p>' +
-      '<button class="btn" data-a="new-pdf">' + ic('upload') + 'Subir cotización (PDF)</button><p style="margin:16px 0 0"><button class="chip" data-a="new-loan">Ya pago el crédito del banco →</button></p>' +
+      '<p class="lead">Sigue tu enganche y tu crédito del banco: cuotas, abonos, parqueos y planos, todo en un solo lugar.</p>' +
+      '<button class="btn" data-a="new">' + ic('plus') + 'Crear mi primer proyecto</button><p class="muted" style="margin:14px 0 0;font-size:.85rem">De enganche o de crédito: tú eliges en qué etapa estás.</p>' +
       '<div class="feats"><div class="feat"><div class="fi">' + ic('scan') + '</div><b>Lee tu cotización</b><span>Toma precio, enganche, cuotas y plazo del PDF en segundos.</span></div>' +
       '<div class="feat"><div class="fi">' + ic('layers') + '</div><b>Enganche, abonos y parqueos</b><span>Cada pago en su lugar, con la cuota del préstamo siempre al día.</span></div>' +
       '<div class="feat"><div class="fi">' + ic('plan') + '</div><b>Planos a la mano</b><span>Guarda los planos de cada proyecto y ábrelos con zoom.</span></div></div>' +
@@ -630,18 +630,26 @@
       im.onerror = function () { URL.revokeObjectURL(u); bad(new Error('imagen no válida')); }; im.src = u;
     });
   }
-  function startImport(updating) {
+  function startImport(updating, kind) {
     pickPdf(function (file) {
       busy('Leyendo tu cotización…');
       readPdf(file).then(function (q) {
         unbusy();
-        if (!q.price && !q.cuotaEnganche && !q.months) { toast('No pude leer datos de esa cotización. Llena el proyecto a mano.'); if (!updating) openDraft(newProject(), false); return; }
+        if (!q.price && !q.cuotaEnganche && !q.months) { toast('No pude leer datos de esa cotización. Llena el proyecto a mano.'); if (!updating) { if (kind === 'loan') openLoanDraft(); else openDraft(newProject(), false); } return; }
         var notes = [], rate = q.rate || 0;
         if (!rate && q.cuotaCredito && q.financed && q.years) { rate = estimateRate(q.financed, q.cuotaCredito, q.years); if (rate) notes.push('La cotización no trae la tasa de interés: la estimé en ' + rate + '% a partir de la cuota del banco (' + Q(q.cuotaCredito) + '). Corrígela si conoces la tasa real.'); }
         if (q.parking) notes.push('Esta cotización incluye ' + q.parking.name.toLowerCase() + ' (' + Q(q.parking.price) + ') dentro del precio final y del préstamo; lo dejé en Parqueos como “incluido”.');
         var patch = { name: q.name, unit: q.unit, size: q.size, price: q.price, bank: q.bank, engancheTotal: q.engancheTotal || 0, enganchePct: q.enganchePct || 0, reserva: q.reserva || 0, months: q.months || 0, cuotaEnganche: q.cuotaEnganche || 0, rate: rate, years: q.years || 0, iusi: q.iusi || 0, seguro: q.seguro || 0, mantenimiento: q.mantenimiento || 0, cuotaNivelada: q.cuotaNivelada || null, cuotaCredito: q.cuotaCredito || null };
         var lgs = q._logos || { list: [], best: -1 }; if (lgs.best >= 0) { patch.logo = lgs.list[lgs.best].url; patch.logoAr = lgs.list[lgs.best].ar; }
         var parkAdd = q.parking ? { id: uid(), name: q.parking.name, price: q.parking.price, bought: true, financed: true } : null;
+        if (kind === 'loan' && !updating) {
+          // Proyecto de crédito desde una cotización: el enganche ya está pagado (a plazos o de contado), el préstamo es el monto a financiar.
+          var principal = q.financed || (q.price && q.engancheTotal ? C.r2(q.price - q.engancheTotal) : 0);
+          S.importDraft = { kind: 'loan', isNew: true, fromPdf: true, logos: lgs.list,
+            notes: notes.concat(['Como el enganche ya está pagado, tomamos tu préstamo como el monto a financiar de la cotización. Escribe el mes de tu primera cuota y ajusta lo que tu banco te haya confirmado.']),
+            project: newProject(Object.assign({}, patch, { phase: 'credito', parkings: parkAdd ? [parkAdd] : [], loan: { principal: principal, rate: rate, years: q.years || 25, startMonth: C.addMonths(C.curMonth(), 1), payment: '', abonos: [], payments: [], recurring: [] } })) };
+          showDraft(true); return;
+        }
         if (updating) { var base = cur(); if (!lgs.list.length || lgs.best < 0) { delete patch.logo; delete patch.logoAr; } S.importDraft = { project: Object.assign({}, base, patch), isNew: false, notes: notes, logos: lgs.list };
           if (parkAdd && !(base.parkings || []).some(function (k) { return k.name === parkAdd.name; })) S.importDraft.project.parkings = (base.parkings || []).concat([parkAdd]); }
         else { S.importDraft = { project: newProject(Object.assign(patch, { startMonth: C.addMonths((q.quoteDate || today()).slice(0, 7), 1), parkings: parkAdd ? [parkAdd] : [] })), isNew: true, notes: notes, logos: lgs.list }; }
@@ -649,15 +657,19 @@
       }).catch(function (e) { unbusy(); toast('Error al leer el PDF: ' + (e.message || e)); });
     });
   }
+  function openLoanDraft() {
+    S.importDraft = { kind: 'loan', isNew: true, logos: [], notes: [], project: newProject({ phase: 'credito', loan: { principal: 0, rate: 7.5, years: 25, startMonth: C.curMonth(), payment: '', abonos: [], payments: [], recurring: [] } }) };
+    showDraft(false); window.scrollTo(0, 0);
+  }
   function openDraft(p, fromPdf) { S.importDraft = { project: p, isNew: true }; showDraft(fromPdf); }
   function showDraft(fromPdf) {
     var d = S.importDraft, loan = d.kind === 'loan'; applyTheme(d.project.color);
-    $app.innerHTML = headerHtml() + '<main><div class="wrap enter" id="wrap"><div class="card"><h2>' + (loan ? (d.converting ? 'Pasa a la etapa de crédito' : 'Tu crédito del banco') : fromPdf ? 'Revisa los datos de la cotización' : 'Nuevo proyecto') + '</h2>' +
+    $app.innerHTML = headerHtml() + '<main><div class="wrap enter" id="wrap"><div class="card"><h2>' + (loan ? (d.converting ? 'Pasa a la etapa de crédito' : fromPdf ? 'Revisa los datos de tu crédito' : 'Tu crédito del banco') : fromPdf ? 'Revisa los datos de la cotización' : 'Nuevo proyecto') + '</h2>' +
       (d.notes || []).map(function (n) { return '<div class="note">' + esc(n) + '</div>'; }).join('') +
-      (fromPdf ? '<p class="muted">Estos datos se leyeron del PDF. Corrige lo que haga falta y guarda. “Mes de la 1.ª cuota” es el mes en que empiezas a pagar las cuotas fraccionadas.</p>' : '') +
+      (fromPdf ? (loan ? '<p class="muted">Estos datos se leyeron de tu cotización. Corrige lo que haga falta y guarda. “Mes de la 1.ª cuota” es el mes de tu primera cuota al banco.</p>' : '<p class="muted">Estos datos se leyeron del PDF. Corrige lo que haga falta y guarda. “Mes de la 1.ª cuota” es el mes en que empiezas a pagar las cuotas fraccionadas.</p>') : '') +
       '<label>Logo del proyecto</label><div class="logos" id="logos"></div>' +
       (loan ? loanFields(d.project, 'd_', { paid: d.converting ? 0 : monthsBetween((d.project.loan || {}).startMonth, C.curMonth()) }) : formFields(d.project, 'd_')) + '<div class="actions"><button class="btn" data-a="draft-save">Guardar</button><button class="btn ghost" data-a="draft-cancel">Cancelar</button>' +
-      (!fromPdf && !loan ? '<button class="btn sec" data-a="draft-pdf">Mejor subir cotización PDF</button>' : '') + '</div></div></div></main>';
+      (!fromPdf ? '<button class="btn sec" data-a="draft-pdf">Mejor subir cotización PDF</button>' : '') + '</div></div></div></main>';
     S.anim = true; bind(); post(); renderLogos(); if (loan) bindLoanDraft();
   }
   function renderLogos() {
@@ -688,7 +700,7 @@
       ['car', 'Parqueos aparte', 'Registra los que compras por separado o los que ya van incluidos en el precio.'], ['plan', 'Tus planos, siempre contigo', 'Guarda los planos de cada proyecto y ábrelos con zoom desde el teléfono.'],
       ['credit', 'Y después, tu crédito del banco', 'Al terminar el enganche, sigue tu préstamo: cuánto debes, intereses, tabla de amortización y cuánto ahorras si abonas.'], ['sync', 'Todos tus proyectos, en cualquier dispositivo', 'Cada apartamento con su logo y color, y tu cuenta igual en el teléfono y en la computadora.']];
     var faq = [['¿Cuánto cuesta?', 'Es gratis. Creas tu cuenta con tu correo y empiezas a usarla.'], ['¿Necesito la cotización en PDF?', 'No es obligatoria. Si la subes, la app llena los datos por ti; si no, los escribes tú.'],
-      ['¿Quién puede ver mis datos?', 'Solo tú. Cada cuenta ve únicamente su propia información, y la conexión es cifrada. Puedes borrar tus proyectos cuando quieras.'], ['¿Sirve cuando ya estoy pagando el crédito del banco?', 'Sí. Al terminar el enganche pasas el proyecto a la etapa de crédito: ves tu saldo, los intereses pagados y por pagar, la tabla de amortización y puedes simular abonos. También puedes empezar directo en esa etapa.'], ['¿Sirve para cualquier apartamento?', 'Sí. Funciona con cualquier proyecto que fraccione el enganche en cuotas, con o sin reserva, y con o sin parqueo.'],
+      ['¿Quién puede ver mis datos?', 'Solo tú. Cada cuenta ve únicamente su propia información, y la conexión es cifrada. Puedes borrar tus proyectos cuando quieras.'], ['¿Sirve cuando ya estoy pagando el crédito del banco?', 'Sí. Al terminar el enganche pasas el proyecto a la etapa de crédito: ves tu saldo, los intereses pagados y por pagar, la tabla de amortización y puedes simular abonos. Si pagaste el enganche de contado, crea un proyecto de crédito desde el principio: puedes subir tu cotización y la app toma el monto a financiar, la tasa y el plazo.'], ['¿Sirve para cualquier apartamento?', 'Sí. Funciona con cualquier proyecto que fraccione el enganche en cuotas, con o sin reserva, y con o sin parqueo.'],
       ['¿Reemplaza a mi desarrolladora o a mi banco?', 'No. Es una herramienta para que tú lleves tu propio control. Los saldos oficiales siempre son los de la desarrolladora y el banco.']];
     return '<header class="top lp-nav"><div class="wrap"><span class="brand"><span class="mark">' + ic('home') + '</span><span class="wm">Mi Enganche</span></span>' +
       '<button class="ibtn" data-a="theme" aria-label="Cambiar tema">' + THEME_ICON[themePref] + '</button><button class="btn ghost sm" data-a="go-auth" data-id="login">Entrar</button><button class="btn sm" data-a="go-auth" data-id="signup">Crear cuenta</button></div></header>' +
@@ -811,6 +823,7 @@
       stat('Intereses por pagar', cq(r.interestRem), 'si sigues este plan') +
       (r.hasPlan && r.planMonthsSaved > 0 ? stat('Con tu plan de abonos', r.endMonth ? fmtMonth(r.endMonth) : '—', 'terminas ' + spanYM(r.planMonthsSaved) + ' antes · ahorras ' + Q(r.planInterestSaved) + ' de interés', 'ok') : '') +
       (r.abonosTotal ? stat('Abonado a capital', cq(r.abonosTotal), (r.interestSaved ? 'te ahorra ' + Q(r.interestSaved) + ' de interés' : '') + (r.monthsSaved ? ' · ' + spanYM(r.monthsSaved) + ' menos' : ''), 'abono') : '') +
+      (p.engancheTotal > 0 ? stat('Enganche pagado', cq(p.engancheTotal), r.price ? (p.engancheTotal / r.price * 100).toFixed(0) + '% del valor del apartamento' : '') : '') +
       (r.price ? stat('Tu parte del apto', cq(r.owned), 'de ' + Q(r.price) + ' de valor') : '') + '</div>';
     h += '<div class="card"><h2>Saldo de tu préstamo</h2><p class="muted" style="margin:-4px 0 10px">Cuánto capital te falta pagar con el tiempo. <a href="#" data-a="goto-tab" data-id="amort" class="lnk">Ver tabla</a></p>' + balanceChart(r) + '</div>';
     h += '<div class="card"><h2>¿Cuánto es capital y cuánto intereses?</h2>' + splitBar(r) + '</div>';
@@ -969,13 +982,22 @@
     for (var k = 0; k < Math.min(n, s.rows.length); k++) out.push({ id: uid(), date: s.rows[k].month + '-15', amount: C.r2(s.rows[k].payment + fx), note: '' });
     return out;
   }
-  function openChooser() {
-    closeSheet(); var d = document.createElement('div'); d.className = 'sheet-back'; d.id = 'sheet';
-    d.innerHTML = '<div class="sheet" role="dialog" aria-label="Nuevo proyecto"><h2>Nuevo proyecto</h2><p class="muted" style="margin:-4px 0 14px">¿En qué etapa estás?</p>' +
-      '<button class="opt" data-a="new-pdf"><span class="oi">' + ic('upload') + '</span><span><b>Estoy pagando el enganche</b><small>Sube la cotización en PDF y la app arma tu plan.</small></span></button>' +
-      '<button class="opt" data-a="new-loan"><span class="oi">' + ic('home') + '</span><span><b>Ya pago el crédito del banco</b><small>Registra tu préstamo y sigue tu saldo, intereses y abonos.</small></span></button>' +
-      '<button class="opt" data-a="new-manual"><span class="oi">' + ic('file') + '</span><span><b>Llenar el enganche a mano</b><small>Sin PDF: escribes los datos tú.</small></span></button>' +
-      '<div class="actions" style="justify-content:flex-end"><button class="btn ghost sm" data-a="sheet-x">Cancelar</button></div></div>';
+  function openChooser(step, kind) {
+    closeSheet(); var d = document.createElement('div'); d.className = 'sheet-back'; d.id = 'sheet'; var inner;
+    var opt = function (act_, id_, icon, title, sub) { return '<button class="opt" data-a="' + act_ + '"' + (id_ ? ' data-id="' + id_ + '"' : '') + '><span class="oi">' + ic(icon) + '</span><span><b>' + title + '</b><small>' + sub + '</small></span></button>'; };
+    if (step === 2) {
+      var loan = kind === 'credito';
+      inner = '<h2>' + (loan ? 'Proyecto de crédito' : 'Proyecto de enganche') + '</h2><p class="muted" style="margin:-4px 0 14px">¿Cómo quieres llenar los datos?</p>' +
+        opt('new-pdf', kind, 'upload', 'Subir la cotización (PDF)', loan ? 'La app lee el monto a financiar, la tasa, el plazo y el logo del proyecto.' : 'La app lee el precio, el enganche, las cuotas, el plazo y el logo.') +
+        opt('new-manual', kind, 'file', 'Llenar a mano', 'Sin PDF: escribes los datos tú.') +
+        '<div class="actions" style="justify-content:space-between"><button class="btn ghost sm" data-a="new">← Atrás</button><button class="btn ghost sm" data-a="sheet-x">Cancelar</button></div>';
+    } else {
+      inner = '<h2>Nuevo proyecto</h2><p class="muted" style="margin:-4px 0 14px">¿Qué tipo de proyecto quieres crear?</p>' +
+        opt('pick-kind', 'enganche', 'layers', 'Proyecto de enganche', 'Vas a pagar el enganche en cuotas. Primero llevas el enganche y después tu crédito del banco.') +
+        opt('pick-kind', 'credito', 'home', 'Proyecto de crédito', 'Ya pagaste el enganche (incluso de contado) y vas directo a pagar el crédito del banco.') +
+        '<div class="actions" style="justify-content:flex-end"><button class="btn ghost sm" data-a="sheet-x">Cancelar</button></div>';
+    }
+    d.innerHTML = '<div class="sheet" role="dialog" aria-label="Nuevo proyecto">' + inner + '</div>';
     d.addEventListener('click', function (e) { if (e.target === d) closeSheet(); });
     Array.prototype.forEach.call(d.querySelectorAll('[data-a]'), function (b) { b.onclick = function (ev) { ev.preventDefault(); act(b.dataset.a, b.dataset.id, b); }; });
     document.body.appendChild(d);
@@ -1010,11 +1032,12 @@
   function act(a, id, el) {
     var p = cur();
     switch (a) {
-      case 'new': openChooser(); break;
+      case 'new': openChooser(1); break;
+      case 'pick-kind': openChooser(2, id); break;
       case 'sheet-x': closeSheet(); break;
-      case 'new-pdf': closeSheet(); startImport(false); break;
-      case 'new-manual': closeSheet(); openDraft(newProject(), false); break;
-      case 'new-loan': closeSheet(); S.importDraft = { kind: 'loan', isNew: true, logos: [], notes: [], project: newProject({ phase: 'credito', loan: { principal: 0, rate: 7.5, years: 25, startMonth: C.curMonth(), payment: '', abonos: [], payments: [] } }) }; showDraft(false); window.scrollTo(0, 0); break;
+      case 'new-pdf': closeSheet(); startImport(false, id === 'credito' ? 'loan' : null); break;
+      case 'new-manual': closeSheet(); if (id === 'credito') openLoanDraft(); else openDraft(newProject(), false); break;
+      case 'new-loan': closeSheet(); openLoanDraft(); break;
       case 'to-loan': {
         var rr = C.compute(p);
         S.importDraft = { kind: 'loan', converting: true, isNew: false, logos: [], notes: ['Tomamos los datos de tu etapa de enganche. Revísalos y ajusta lo que tu banco te haya confirmado.'],
@@ -1116,7 +1139,7 @@
         if (confirm('¿Eliminar "' + label(p) + '" y todos sus pagos y planos? No se puede deshacer.')) {
           Promise.all((p.files || []).map(function (f) { return Files.del(f.id).catch(function () { }); })).then(function () { return store.remove(p.id); }).then(function () { S.projects = S.projects.filter(function (x) { return x.id !== p.id; }); S.id = S.projects[0] ? S.projects[0].id : null; go('home'); });
         } break;
-      case 'draft-pdf': startImport(false); break;
+      case 'draft-pdf': startImport(false, S.importDraft && S.importDraft.kind === 'loan' ? 'loan' : null); break;
       case 'draft-cancel': S.importDraft = null; S.anim = true; render(); break;
       case 'draft-save':
         var d = S.importDraft, np = d.kind === 'loan' ? readLoanForm('d_', d.project) : readForm('d_', d.project);
