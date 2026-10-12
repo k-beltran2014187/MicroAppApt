@@ -1,0 +1,11 @@
+{
+  "name": "Mi Enganche",
+  "short_name": "Mi Enganche",
+  "description": "Control de pagos de enganche y abonos",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f4f7f6",
+  "theme_color": "#0f766e",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}
